@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Glow / Background Accent -->
+    <path
+        android:fillColor="#33FFFFFF"
+        android:pathData="M54,22A32,32 0,1 0,86,54A32,32 0,0 0,54,22Z" />
+    <!-- Cinema Ticket Base (Centered in 108x108) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,38 C34,35.8 35.8,34 38,34 H70 C72.2,34 74,35.8 74,38 V46 C71.8,46 70,47.8 70,50 C70,52.2 71.8,54 74,54 V70 C74,72.2 72.2,74 70,74 H38 C35.8,74 34,72.2 34,70 V54 C36.2,54 38,52.2 38,50 C38,47.8 36.2,46 34,46 Z" />
+    <!-- Ticket Inner Stars / Detail -->
+    <path
+        android:fillColor="#E01D75"
+        android:pathData="M54,42 L55.5,46.5 L60,46.5 L56.3,49.2 L57.7,53.7 L54,51 L50.3,53.7 L51.7,49.2 L48,46.5 L52.5,46.5 Z" />
+    <!-- Ticket Strip -->
+    <path
+        android:strokeColor="#E01D75"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M44,59 H64 M44,64 H64" />
+</vector>

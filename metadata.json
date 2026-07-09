@@ -1,0 +1,6 @@
+{
+  "name": "Neon Cine",
+  "description": "Ứng dụng đặt vé xem phim độc lập Neon Cine, giao diện trẻ trung năng động tích hợp AI đánh giá.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
