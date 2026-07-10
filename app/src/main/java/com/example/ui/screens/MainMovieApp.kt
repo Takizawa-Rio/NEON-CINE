@@ -49,6 +49,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import android.Manifest
 import android.content.Context
@@ -124,6 +125,27 @@ fun MainMovieApp(
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(16.dp)
         )
+    }
+
+    // System Back Press / Swipe Gesture Navigation Handling
+    if (!showSplashScreen) {
+        when {
+            isBookingActive -> {
+                BackHandler(enabled = true) {
+                    viewModel.stopBookingFlow()
+                }
+            }
+            selectedMovie != null -> {
+                BackHandler(enabled = true) {
+                    viewModel.selectMovie(null)
+                }
+            }
+            currentTab != 0 -> {
+                BackHandler(enabled = true) {
+                    viewModel.selectTab(0)
+                }
+            }
+        }
     }
 
     if (showSplashScreen) {
@@ -1657,6 +1679,12 @@ fun BookingFlowScreen(
     var showPaymentConfirm by remember { mutableStateOf(false) }
     var isProcessingPayment by remember { mutableStateOf(false) }
     var showSuccessAnimation by remember { mutableStateOf(false) }
+
+    if (showPaymentConfirm) {
+        BackHandler(enabled = true) {
+            showPaymentConfirm = false
+        }
+    }
 
     if (movie == null) return
 

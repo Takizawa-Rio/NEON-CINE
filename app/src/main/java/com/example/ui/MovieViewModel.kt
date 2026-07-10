@@ -30,7 +30,62 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = application.getSharedPreferences("neon_cine_prefs", android.content.Context.MODE_PRIVATE)
 
     private val _movies = MutableStateFlow<List<Movie>>(repository.movies)
-    val movies: StateFlow<List<Movie>> = _movies.asStateFlow()
+    private val _customMovieDatesTrigger = MutableStateFlow(0)
+
+    val rawMoviesList: StateFlow<List<Movie>> = _movies.asStateFlow()
+
+    val movies: StateFlow<List<Movie>> = combine(_movies, _customMovieDatesTrigger) { rawMovies, _ ->
+        val currentDate = Date()
+        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        
+        rawMovies.mapNotNull { movie ->
+            val customStart = prefs.getString("movie_${movie.id}_start_date", null)
+            val customEnd = prefs.getString("movie_${movie.id}_end_date", null)
+            
+            val startDate = if (!customStart.isNullOrBlank()) {
+                try { sdf.parse(customStart) } catch (e: Exception) { null }
+            } else null
+            
+            val endDate = if (!customEnd.isNullOrBlank()) {
+                try { sdf.parse(customEnd) } catch (e: Exception) { null }
+            } else null
+            
+            // Expiry Check: If end date is set and current date is past the end date (end of that day)
+            if (endDate != null) {
+                val calEnd = Calendar.getInstance().apply {
+                    time = endDate
+                    set(Calendar.HOUR_OF_DAY, 23)
+                    set(Calendar.MINUTE, 59)
+                    set(Calendar.SECOND, 59)
+                    set(Calendar.MILLISECOND, 999)
+                }
+                if (currentDate.after(calEnd.time)) {
+                    // This movie is expired and should be automatically removed (gỡ bỏ)!
+                    return@mapNotNull null
+                }
+            }
+            
+            // Status determination: Now Showing vs Coming Soon
+            val isNowShowingNew = if (startDate != null) {
+                val calStart = Calendar.getInstance().apply {
+                    time = startDate
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                currentDate.after(calStart.time) || currentDate.equals(calStart.time)
+            } else {
+                movie.isNowShowing
+            }
+            
+            movie.copy(isNowShowing = isNowShowingNew)
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = repository.movies
+    )
 
     // Lịch sử vé đã đặt
     val tickets: StateFlow<List<Ticket>> = repository.allTickets
@@ -598,5 +653,26 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             _selectedMovie.value = null
             _currentTab.value = 3 // Chuyển sang tab "Vé của tôi" (tab số 3) để xem vé vừa đặt!
         }
+    }
+
+    fun setMovieShowingDates(movieId: Int, startDate: String?, endDate: String?) {
+        prefs.edit().apply {
+            if (startDate != null) putString("movie_${movieId}_start_date", startDate)
+            else remove("movie_${movieId}_start_date")
+            
+            if (endDate != null) putString("movie_${movieId}_end_date", endDate)
+            else remove("movie_${movieId}_end_date")
+        }.apply()
+        
+        // Trigger flow update
+        _customMovieDatesTrigger.value += 1
+    }
+    
+    fun getMovieCustomStartDate(movieId: Int): String {
+        return prefs.getString("movie_${movieId}_start_date", "") ?: ""
+    }
+    
+    fun getMovieCustomEndDate(movieId: Int): String {
+        return prefs.getString("movie_${movieId}_end_date", "") ?: ""
     }
 }

@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.activity.compose.BackHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.ui.MovieViewModel
@@ -541,6 +542,7 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
     var checkInMessage by remember { mutableStateOf("") }
     var showRedeemDialog by remember { mutableStateOf(false) }
     var redeemedVoucherCode by remember { mutableStateOf<String?>(null) }
+    var showAdminMovieDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -806,6 +808,13 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                         subtitle = "Chi tiết lịch sử đặt vé xem phim của bạn",
                         onClick = { viewModel.selectTab(3) } // Di chuyển đến lịch sử đặt vé
                     )
+                    Divider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp))
+                    ProfileMenuRow(
+                        icon = Icons.Rounded.Settings,
+                        title = "Quản Trị Lịch Chiếu Phim (Admin)",
+                        subtitle = "Cấu hình ngày chiếu & tự động gỡ bỏ khi hết hạn",
+                        onClick = { showAdminMovieDialog = true }
+                    )
                 }
             }
 
@@ -1020,6 +1029,262 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                             ) {
                                 Text("Đóng", color = Color.Black, fontWeight = FontWeight.Bold)
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAdminMovieDialog) {
+        BackHandler(enabled = true) {
+            showAdminMovieDialog = false
+        }
+        val rawMovies by viewModel.rawMoviesList.collectAsStateWithLifecycle()
+        val tempStartDates = remember(showAdminMovieDialog) {
+            mutableStateMapOf<Int, String>().apply {
+                rawMovies.forEach { movie ->
+                    put(movie.id, viewModel.getMovieCustomStartDate(movie.id))
+                }
+            }
+        }
+        val tempEndDates = remember(showAdminMovieDialog) {
+            mutableStateMapOf<Int, String>().apply {
+                rawMovies.forEach { movie ->
+                    put(movie.id, viewModel.getMovieCustomEndDate(movie.id))
+                }
+            }
+        }
+
+        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+
+        Dialog(
+            onDismissRequest = { showAdminMovieDialog = false }
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.85f),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
+                    // Title
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.Settings,
+                                contentDescription = "Admin",
+                                tint = NeonPrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Quản Trị Lịch Phim",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                        IconButton(onClick = { showAdminMovieDialog = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Gray)
+                        }
+                    }
+                    
+                    Text(
+                        text = "Thiết lập ngày chiếu cho từng phim. Phim quá hạn kết thúc sẽ tự động gỡ bỏ khỏi danh sách hiển thị.",
+                        fontSize = 11.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    Divider(color = Color.White.copy(alpha = 0.1f))
+
+                    // Movie List Configuration
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(vertical = 12.dp)
+                    ) {
+                        items(rawMovies) { movie ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    // Movie Title & Image
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        AsyncImage(
+                                            model = movie.posterUrl,
+                                            contentDescription = movie.title,
+                                            modifier = Modifier
+                                                .size(40.dp, 56.dp)
+                                                .clip(RoundedCornerShape(4.dp)),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = movie.title,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = Color.White,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = movie.genre,
+                                                fontSize = 11.sp,
+                                                color = Color.Gray
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Start Date and End Date Inputs
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedTextField(
+                                            value = tempStartDates[movie.id] ?: "",
+                                            onValueChange = { tempStartDates[movie.id] = it },
+                                            label = { Text("Bắt đầu", fontSize = 10.sp) },
+                                            placeholder = { Text("dd/MM/yyyy", fontSize = 11.sp) },
+                                            modifier = Modifier.weight(1f),
+                                            singleLine = true,
+                                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = NeonPrimary,
+                                                focusedLabelColor = NeonPrimary,
+                                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f)
+                                            )
+                                        )
+                                        OutlinedTextField(
+                                            value = tempEndDates[movie.id] ?: "",
+                                            onValueChange = { tempEndDates[movie.id] = it },
+                                            label = { Text("Kết thúc", fontSize = 10.sp) },
+                                            placeholder = { Text("dd/MM/yyyy", fontSize = 11.sp) },
+                                            modifier = Modifier.weight(1f),
+                                            singleLine = true,
+                                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = NeonPrimary,
+                                                focusedLabelColor = NeonPrimary,
+                                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f)
+                                            )
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // Presets Buttons
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        // Preset: Đang chiếu
+                                        TextButton(
+                                            onClick = {
+                                                val cal = Calendar.getInstance()
+                                                tempStartDates[movie.id] = sdf.format(cal.time)
+                                                cal.add(Calendar.DAY_OF_YEAR, 14)
+                                                tempEndDates[movie.id] = sdf.format(cal.time)
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(30.dp)
+                                        ) {
+                                            Text("Đang chiếu 🟢", fontSize = 10.sp, color = NeonSecondary)
+                                        }
+
+                                        // Preset: Sắp chiếu
+                                        TextButton(
+                                            onClick = {
+                                                val cal = Calendar.getInstance()
+                                                cal.add(Calendar.DAY_OF_YEAR, 3)
+                                                tempStartDates[movie.id] = sdf.format(cal.time)
+                                                cal.add(Calendar.DAY_OF_YEAR, 14)
+                                                tempEndDates[movie.id] = sdf.format(cal.time)
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(30.dp)
+                                        ) {
+                                            Text("Sắp chiếu 🟡", fontSize = 10.sp, color = Color(0xFFFF9800))
+                                        }
+
+                                        // Preset: Hết hạn (Tự gỡ bỏ)
+                                        TextButton(
+                                            onClick = {
+                                                val cal = Calendar.getInstance()
+                                                cal.add(Calendar.DAY_OF_YEAR, -10)
+                                                tempStartDates[movie.id] = sdf.format(cal.time)
+                                                cal.add(Calendar.DAY_OF_YEAR, 9) // ends yesterday
+                                                tempEndDates[movie.id] = sdf.format(cal.time)
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(30.dp)
+                                        ) {
+                                            Text("Hết hạn 🔴", fontSize = 10.sp, color = Color.Red)
+                                        }
+
+                                        Spacer(modifier = Modifier.weight(1f))
+
+                                        // Preset: Xóa
+                                        TextButton(
+                                            onClick = {
+                                                tempStartDates[movie.id] = ""
+                                                tempEndDates[movie.id] = ""
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(30.dp)
+                                        ) {
+                                            Text("Xóa", fontSize = 10.sp, color = Color.LightGray)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Divider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 12.dp))
+
+                    // Actions
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showAdminMovieDialog = false },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Hủy", color = Color.White)
+                        }
+                        Button(
+                            onClick = {
+                                rawMovies.forEach { movie ->
+                                    val start = tempStartDates[movie.id]?.takeIf { it.isNotBlank() }
+                                    val end = tempEndDates[movie.id]?.takeIf { it.isNotBlank() }
+                                    viewModel.setMovieShowingDates(movie.id, start, end)
+                                }
+                                showAdminMovieDialog = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonPrimary),
+                            modifier = Modifier.weight(1.5f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Lưu Thiết Lập", color = Color.Black, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
