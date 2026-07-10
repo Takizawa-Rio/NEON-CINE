@@ -23,7 +23,6 @@ object SupabaseSyncService {
     private const val TAG = "SupabaseSync"
 
     // Điền thông tin Supabase của bạn ở đây để kết nối với cơ sở dữ liệu thật!
-    // Bạn cũng có thể thiết lập các khóa này trong Secrets Panel của AI Studio.
     private const val SUPABASE_URL = "https://rdfnidhtqoyshjawnxqt.supabase.co"
     private const val SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkZm5pZGh0cW95c2hqYXdueHF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0MjUwNTcsImV4cCI6MjA5OTAwMTA1N30.nVMPKkGdcy_pSGseK2mdxBkg9skOzB69GMpyK-iSApw"
 
