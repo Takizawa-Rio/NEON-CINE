@@ -1886,18 +1886,64 @@ fun BookingFlowScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Interactive 6x8 seat grid
+                // Header indicators for Stairways & Exits
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Subway,
+                            contentDescription = "Stairs Left",
+                            tint = Color(0xFFFFB74D),
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = "LỐI CẦU THANG 1 🪜",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFB74D)
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "LỐI CẦU THANG 2 🪜",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFB74D)
+                        )
+                        Icon(
+                            imageVector = Icons.Rounded.Subway,
+                            contentDescription = "Stairs Right",
+                            tint = Color(0xFFFFB74D),
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Interactive 6x8 seat grid with vivid stairs & aisles
                 Column(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     val rows = listOf("A", "B", "C", "D", "E", "F")
-                    val cols = 8
 
                     for (row in rows) {
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
@@ -1907,11 +1953,38 @@ fun BookingFlowScreen(
                                 color = Color.Gray,
                                 modifier = Modifier.width(14.dp)
                             )
-                            for (col in 1..cols) {
+
+                            // CẦU THANG BÊN TRÁI (Left Staircase)
+                            Box(
+                                modifier = Modifier
+                                    .width(20.dp)
+                                    .height(30.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(Color(0xFF2C2D3A), Color(0xFF1E1F2A))
+                                        )
+                                    )
+                                    .border(0.5.dp, Color(0xFFFFB74D).copy(alpha = 0.5f), RoundedCornerShape(3.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    verticalArrangement = Arrangement.SpaceEvenly,
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    Box(modifier = Modifier.fillMaxWidth(0.8f).height(2.dp).background(Color(0xFFFFB74D)))
+                                    Box(modifier = Modifier.fillMaxWidth(0.5f).height(1.5.dp).background(Color.White.copy(alpha = 0.6f)))
+                                    Box(modifier = Modifier.fillMaxWidth(0.8f).height(2.dp).background(Color(0xFFFFB74D)))
+                                }
+                            }
+
+                            // Ghế 1 -> 4 (Bên trái)
+                            for (col in 1..4) {
                                 val seatId = "$row$col"
                                 val isSelected = selectedSeats.contains(seatId)
                                 val isBooked = bookedSeats.contains(seatId)
-                                val isVIP = row == "D" || row == "E" // VIP rows
+                                val isVIP = row == "D" || row == "E"
 
                                 Box(
                                     modifier = Modifier
@@ -1919,9 +1992,9 @@ fun BookingFlowScreen(
                                         .clip(RoundedCornerShape(4.dp))
                                         .background(
                                             when {
-                                                isBooked -> Color(0xFF555555) // Màu xám đậm cho ghế đã đặt
+                                                isBooked -> Color(0xFF555555)
                                                 isSelected -> MomoPrimary
-                                                isVIP -> Color(0xFFBA68C8) // VIP color purple
+                                                isVIP -> Color(0xFFBA68C8)
                                                 else -> Color.LightGray.copy(alpha = 0.6f)
                                             }
                                         )
@@ -1939,6 +2012,83 @@ fun BookingFlowScreen(
                                     )
                                 }
                             }
+
+                            // LỐI ĐI TRUNG TÂM (Center Aisle)
+                            Box(
+                                modifier = Modifier
+                                    .width(14.dp)
+                                    .height(30.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    verticalArrangement = Arrangement.SpaceBetween,
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.fillMaxHeight().padding(vertical = 4.dp)
+                                ) {
+                                    Box(modifier = Modifier.size(3.dp).clip(CircleShape).background(Color(0xFF00E676)))
+                                    Text("▲", fontSize = 6.sp, color = Color.Gray.copy(alpha = 0.7f))
+                                    Box(modifier = Modifier.size(3.dp).clip(CircleShape).background(Color(0xFF00E676)))
+                                }
+                            }
+
+                            // Ghế 5 -> 8 (Bên phải)
+                            for (col in 5..8) {
+                                val seatId = "$row$col"
+                                val isSelected = selectedSeats.contains(seatId)
+                                val isBooked = bookedSeats.contains(seatId)
+                                val isVIP = row == "D" || row == "E"
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(30.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(
+                                            when {
+                                                isBooked -> Color(0xFF555555)
+                                                isSelected -> MomoPrimary
+                                                isVIP -> Color(0xFFBA68C8)
+                                                else -> Color.LightGray.copy(alpha = 0.6f)
+                                            }
+                                        )
+                                        .then(
+                                            if (isBooked) Modifier else Modifier.clickable { viewModel.toggleSeat(seatId) }
+                                        )
+                                        .testTag("seat_$seatId"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (isBooked) "X" else "$col",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isBooked) Color.White.copy(alpha = 0.4f) else if (isSelected) Color.White else Color.Black
+                                    )
+                                }
+                            }
+
+                            // CẦU THANG BÊN PHẢI (Right Staircase)
+                            Box(
+                                modifier = Modifier
+                                    .width(20.dp)
+                                    .height(30.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(Color(0xFF2C2D3A), Color(0xFF1E1F2A))
+                                        )
+                                    )
+                                    .border(0.5.dp, Color(0xFFFFB74D).copy(alpha = 0.5f), RoundedCornerShape(3.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    verticalArrangement = Arrangement.SpaceEvenly,
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    Box(modifier = Modifier.fillMaxWidth(0.8f).height(2.dp).background(Color(0xFFFFB74D)))
+                                    Box(modifier = Modifier.fillMaxWidth(0.5f).height(1.5.dp).background(Color.White.copy(alpha = 0.6f)))
+                                    Box(modifier = Modifier.fillMaxWidth(0.8f).height(2.dp).background(Color(0xFFFFB74D)))
+                                }
+                            }
                         }
                     }
                 }
@@ -1954,12 +2104,12 @@ fun BookingFlowScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(Color.LightGray))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Thường (95k)", fontSize = 10.sp)
+                        Text("Thường", fontSize = 10.sp)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFFBA68C8)))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("VIP (95k)", fontSize = 10.sp)
+                        Text("VIP", fontSize = 10.sp)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(MomoPrimary))
@@ -1967,9 +2117,18 @@ fun BookingFlowScreen(
                         Text("Đang chọn", fontSize = 10.sp)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF555555)))
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp, 10.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color(0xFF2C2D3A))
+                                .border(0.5.dp, Color(0xFFFFB74D), RoundedCornerShape(2.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(modifier = Modifier.fillMaxWidth(0.8f).height(1.5.dp).background(Color(0xFFFFB74D)))
+                        }
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Đã bán (X)", fontSize = 10.sp)
+                        Text("Cầu thang 🪜", fontSize = 10.sp)
                     }
                 }
             }

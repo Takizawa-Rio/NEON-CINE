@@ -62,3 +62,12 @@ data class PromoCode(
     val description: String,
     @Json(name = "is_used") val isUsed: Boolean = false
 )
+
+data class UserNotification(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val title: String,
+    val message: String,
+    val timestamp: String,
+    val type: String = "info" // "booking", "promo", "system"
+)
+

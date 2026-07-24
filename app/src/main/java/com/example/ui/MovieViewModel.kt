@@ -9,6 +9,7 @@ import com.example.data.model.Review
 import com.example.data.model.Ticket
 import com.example.data.model.UserProfile
 import com.example.data.model.PromoCode
+import com.example.data.model.UserNotification
 import com.example.data.repository.MovieRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -246,6 +247,10 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     // Số dư ví giả định của Momo
     val momoBalance get() = _userBalance.value // Liên kết ví Momo của app cũ với Neon Pay mới
 
+    // Thông báo tin nhắn từng tài khoản
+    private val _userNotifications = MutableStateFlow<List<UserNotification>>(emptyList())
+    val userNotifications: StateFlow<List<UserNotification>> = _userNotifications.asStateFlow()
+
     init {
         // Tắt splash screen sau 2.2 giây
         viewModelScope.launch {
@@ -260,6 +265,10 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         _userPoints.value = prefs.getInt("user_points", 150)
         _userBalance.value = prefs.getInt("user_balance", 500000)
         _isPromoCodeUsed.value = false
+
+        if (_userEmail.value.isNotBlank()) {
+            loadNotificationsForUser(_userEmail.value)
+        }
 
         // Khởi tạo đánh giá mặc định
         viewModelScope.launch {
@@ -341,6 +350,8 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             .putInt("user_balance", 500000)
             .apply()
 
+        loadNotificationsForUser(email)
+
         // Đồng bộ nâng cao từ Supabase profiles table
         com.example.data.supabase.SupabaseSyncService.fetchProfileFromSupabase(email) { remoteProfile ->
             if (remoteProfile != null) {
@@ -378,6 +389,9 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             .putInt("user_balance", 500000)
             .apply()
 
+        loadNotificationsForUser(email)
+        addNotification("🎉 Đăng ký thành viên", "Chào mừng $name! Bạn đã nhận được +250 Neon Points quà mừng hội viên mới.", "system")
+
         // Đồng bộ lên Supabase profiles table
         val profile = UserProfile(email = email, name = name, points = 250, balance = 500000)
         com.example.data.supabase.SupabaseSyncService.pushProfileToSupabase(profile) { }
@@ -390,7 +404,111 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         _userPoints.value = 150
         _userBalance.value = 500000
         _isPromoCodeUsed.value = false
+        _userNotifications.value = emptyList()
         prefs.edit().clear().apply()
+    }
+
+    // --- Quản lý Thông báo tin nhắn từng Tài khoản (Acc) ---
+    fun loadNotificationsForUser(email: String) {
+        if (email.isBlank()) {
+            _userNotifications.value = emptyList()
+            return
+        }
+        val rawStr = prefs.getString("notifications_$email", null)
+        if (rawStr.isNullOrBlank()) {
+            val sdf = SimpleDateFormat("HH:mm - dd/MM", Locale.getDefault())
+            val now = sdf.format(Date())
+            val defaultList = listOf(
+                UserNotification(
+                    title = "🎉 Chào mừng hội viên Neon Cine",
+                    message = "Tài khoản $email đã sẵn sàng. Bạn có thể đặt vé, nhận ưu đãi bắp nước và tích điểm thưởng ngay hôm nay!",
+                    timestamp = now,
+                    type = "system"
+                ),
+                UserNotification(
+                    title = "🎟️ Mã giảm giá vé cực hot",
+                    message = "Sử dụng mã HE2026 hoặc NEON30 tại màn hình thanh toán để nhận ngay ưu đãi giảm giá vé xem phim.",
+                    timestamp = "09:00 - Hôm nay",
+                    type = "promo"
+                ),
+                UserNotification(
+                    title = "🍿 Đổi quà bắp nước miễn phí",
+                    message = "Tích lũy đủ 100 Neon Points để nhận ngay Combo Bắp Nước miễn phí tại quầy rạp Neon Cine.",
+                    timestamp = "08:30 - Hôm nay",
+                    type = "promo"
+                )
+            )
+            saveNotificationsForUser(email, defaultList)
+            _userNotifications.value = defaultList
+        } else {
+            _userNotifications.value = parseNotifications(rawStr)
+        }
+    }
+
+    private fun saveNotificationsForUser(email: String, list: List<UserNotification>) {
+        if (email.isBlank()) return
+        val encoded = serializeNotifications(list)
+        prefs.edit().putString("notifications_$email", encoded).apply()
+    }
+
+    fun deleteNotification(notificationId: String) {
+        val email = _userEmail.value
+        val updated = _userNotifications.value.filter { it.id != notificationId }
+        _userNotifications.value = updated
+        saveNotificationsForUser(email, updated)
+    }
+
+    fun clearAllNotifications() {
+        val email = _userEmail.value
+        _userNotifications.value = emptyList()
+        saveNotificationsForUser(email, emptyList())
+    }
+
+    fun addNotification(title: String, message: String, type: String = "system") {
+        val email = _userEmail.value
+        if (email.isBlank()) return
+        val sdf = SimpleDateFormat("HH:mm - dd/MM", Locale.getDefault())
+        val newNotif = UserNotification(
+            title = title,
+            message = message,
+            timestamp = sdf.format(Date()),
+            type = type
+        )
+        val updated = listOf(newNotif) + _userNotifications.value
+        _userNotifications.value = updated
+        saveNotificationsForUser(email, updated)
+    }
+
+    private fun serializeNotifications(list: List<UserNotification>): String {
+        val sb = StringBuilder()
+        for (item in list) {
+            val cleanTitle = item.title.replace("||", " ").replace("\n", " ")
+            val cleanMsg = item.message.replace("||", " ").replace("\n", " ")
+            val cleanTime = item.timestamp.replace("||", " ").replace("\n", " ")
+            sb.append("${item.id}||${cleanTitle}||${cleanMsg}||${cleanTime}||${item.type}\n")
+        }
+        return sb.toString()
+    }
+
+    private fun parseNotifications(str: String): List<UserNotification> {
+        val result = mutableListOf<UserNotification>()
+        val lines = str.split("\n")
+        for (line in lines) {
+            if (line.isBlank()) continue
+            val parts = line.split("||")
+            if (parts.size >= 5) {
+                result.add(
+                    UserNotification(
+                        id = parts[0],
+                        title = parts[1],
+                        message = parts[2],
+                        timestamp = parts[3],
+                        type = parts[4]
+                    )
+                )
+            }
+        }
+        return result
     }
 
     fun selectMovie(movie: Movie?) {
@@ -488,6 +606,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         
         val profile = UserProfile(email = _userEmail.value, name = _userName.value, points = _userPoints.value, balance = _userBalance.value)
         com.example.data.supabase.SupabaseSyncService.pushProfileToSupabase(profile) {}
+        addNotification("💎 Điểm danh thành công", "Bạn đã nhận được +20 Neon Points điểm danh ngày hôm nay!", "system")
         onResult("Điểm danh thành công! Nhận ngay +20 Neon Points 💎")
     }
 
@@ -505,6 +624,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         com.example.data.supabase.SupabaseSyncService.pushProfileToSupabase(profile) {}
         
         val voucherCode = "REDEEM-" + UUID.randomUUID().toString().substring(0, 8).uppercase(Locale.getDefault())
+        addNotification("🍿 Đổi bắp nước thành công", "Mã voucher đổi Combo Bắp Nước của bạn: $voucherCode. Đưa mã này cho nhân viên tại quầy.", "promo")
         onResult(voucherCode)
     }
 
@@ -642,6 +762,11 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             repository.bookTicket(ticket)
+            addNotification(
+                title = "🎟️ Đặt vé thành công",
+                message = "Vé phim ${movie.title} tại ${_selectedCinema.value}, suất ${_selectedDate.value} lúc ${_selectedTime.value}. Ghế chọn: $seatsStr. Mã vé: $barcode",
+                type = "booking"
+            )
             onSuccess()
             // Reset trạng thái đặt vé
             _selectedSeats.value = emptySet()

@@ -537,12 +537,14 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
     val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
     val userPoints by viewModel.userPoints.collectAsStateWithLifecycle()
     val userBalance by viewModel.userBalance.collectAsStateWithLifecycle()
+    val userNotifications by viewModel.userNotifications.collectAsStateWithLifecycle()
 
     var showCheckInDialog by remember { mutableStateOf(false) }
     var checkInMessage by remember { mutableStateOf("") }
     var showRedeemDialog by remember { mutableStateOf(false) }
     var redeemedVoucherCode by remember { mutableStateOf<String?>(null) }
     var showAdminMovieDialog by remember { mutableStateOf(false) }
+    var showNotificationDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -800,6 +802,13 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                         title = "Đổi Quà Tích Điểm",
                         subtitle = "Dùng Neon Points đổi bắp nước miễn phí",
                         onClick = { showRedeemDialog = true }
+                    )
+                    Divider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp))
+                    ProfileMenuRow(
+                        icon = Icons.Rounded.Notifications,
+                        title = "Hộp Thư Tin Nhắn (${userNotifications.size})",
+                        subtitle = "Xem tin nhắn hệ thống, vé đã đặt & xóa tin nhắn per acc",
+                        onClick = { showNotificationDialog = true }
                     )
                     Divider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp))
                     ProfileMenuRow(
@@ -1286,6 +1295,225 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                         ) {
                             Text("Lưu Thiết Lập", color = Color.Black, fontWeight = FontWeight.Bold)
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // Dialog Quản lý Thông báo Tin Nhắn (Notification per account)
+    if (showNotificationDialog) {
+        Dialog(
+            onDismissRequest = { showNotificationDialog = false }
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.82f),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
+                    // Header Title
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.Notifications,
+                                contentDescription = "Tin nhắn",
+                                tint = NeonPrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Thông Báo & Tin Nhắn",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "Tài khoản: $userEmail",
+                                    fontSize = 11.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+                        IconButton(onClick = { showNotificationDialog = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Gray)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (userNotifications.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                onClick = { viewModel.clearAllNotifications() }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Xóa Tất Cả Tin Nhắn",
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    Divider(color = Color.White.copy(alpha = 0.1f))
+
+                    if (userNotifications.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Rounded.MarkEmailRead,
+                                    contentDescription = "Trống",
+                                    tint = Color.Gray.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(50.dp)
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "Hộp thư thông báo trống!",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Không có tin nhắn nào cho tài khoản này.",
+                                    fontSize = 11.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(userNotifications, key = { it.id }) { item ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(
+                                                    when (item.type) {
+                                                        "booking" -> NeonSecondary.copy(alpha = 0.15f)
+                                                        "promo" -> NeonTertiary.copy(alpha = 0.15f)
+                                                        else -> NeonPrimary.copy(alpha = 0.15f)
+                                                    }
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = when (item.type) {
+                                                    "booking" -> Icons.Rounded.ConfirmationNumber
+                                                    "promo" -> Icons.Rounded.CardGiftcard
+                                                    else -> Icons.Rounded.Notifications
+                                                },
+                                                contentDescription = null,
+                                                tint = when (item.type) {
+                                                    "booking" -> NeonSecondary
+                                                    "promo" -> NeonTertiary
+                                                    else -> NeonPrimary
+                                                },
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(10.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = item.title,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 12.sp,
+                                                    color = Color.White,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Text(
+                                                    text = item.timestamp,
+                                                    fontSize = 9.sp,
+                                                    color = Color.Gray
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = item.message,
+                                                fontSize = 11.sp,
+                                                color = Color.LightGray
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(6.dp))
+
+                                        IconButton(
+                                            onClick = { viewModel.deleteNotification(item.id) },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Xóa tin nhắn",
+                                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = { showNotificationDialog = false },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonPrimary),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Đóng", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                 }
             }
