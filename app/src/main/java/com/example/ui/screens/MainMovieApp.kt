@@ -1173,10 +1173,27 @@ fun MovieDetailScreen(
     val movie by viewModel.selectedMovie.collectAsStateWithLifecycle()
     val reviews by viewModel.currentMovieReviews.collectAsStateWithLifecycle()
     val aiState by viewModel.aiAnalysisState.collectAsStateWithLifecycle()
+    val tickets by viewModel.tickets.collectAsStateWithLifecycle()
+    val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
+    val userName by viewModel.userName.collectAsStateWithLifecycle()
+
+    val hasUserBookedMovie = remember(tickets, movie, userEmail) {
+        val currentMovie = movie ?: return@remember false
+        tickets.any { ticket ->
+            ticket.movieId == currentMovie.id &&
+            (userEmail.isBlank() || ticket.userEmail == userEmail || ticket.userEmail.isBlank())
+        }
+    }
 
     var authorName by remember { mutableStateOf("") }
     var reviewRating by remember { mutableStateOf(5) }
     var reviewContent by remember { mutableStateOf("") }
+
+    LaunchedEffect(userName) {
+        if (authorName.isBlank() && userName.isNotBlank()) {
+            authorName = userName
+        }
+    }
 
     val scrollState = rememberScrollState()
 
@@ -1516,94 +1533,164 @@ fun MovieDetailScreen(
                 }
             }
 
-            // Form to Add Custom Review
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = "Viết Đánh Giá Của Bạn",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MomoPrimary
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Star Select
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text("Điểm số: ", style = MaterialTheme.typography.bodyMedium)
-                        repeat(5) { index ->
-                            val starValue = index + 1
+            // Form to Add Custom Review (Only for users who have booked a ticket for this movie)
+            if (hasUserBookedMovie) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = if (starValue <= reviewRating) Icons.Filled.Star else Icons.Outlined.Star,
-                                contentDescription = null,
-                                tint = Color(0xFFFFC107),
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clickable { reviewRating = starValue }
-                                    .testTag("star_$starValue")
+                                imageVector = Icons.Rounded.Verified,
+                                contentDescription = "Khán giả đã xem",
+                                tint = MomoPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Viết Đánh Giá Của Bạn (Vé đã xác thực)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MomoPrimary
                             )
                         }
-                    }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Author input
-                    OutlinedTextField(
-                        value = authorName,
-                        onValueChange = { authorName = it },
-                        label = { Text("Tên của bạn") },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("review_author_input"),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MomoPrimary,
-                            focusedLabelColor = MomoPrimary
+                        // Star Select (Fixed Touch Target & Clear Feedback)
+                        Text(
+                            text = "Đánh giá số sao:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Content input
-                    OutlinedTextField(
-                        value = reviewContent,
-                        onValueChange = { reviewContent = it },
-                        label = { Text("Nhận xét về bộ phim...") },
-                        maxLines = 3,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(100.dp)
-                            .testTag("review_content_input"),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MomoPrimary,
-                            focusedLabelColor = MomoPrimary
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Button(
-                        onClick = {
-                            if (authorName.isNotBlank() && reviewContent.isNotBlank()) {
-                                viewModel.submitReview(authorName, reviewRating, reviewContent)
-                                authorName = ""
-                                reviewContent = ""
-                                reviewRating = 5
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            repeat(5) { index ->
+                                val starValue = index + 1
+                                IconButton(
+                                    onClick = { reviewRating = starValue },
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .testTag("star_$starValue")
+                                ) {
+                                    Icon(
+                                        imageVector = if (starValue <= reviewRating) Icons.Filled.Star else Icons.Outlined.Star,
+                                        contentDescription = "$starValue sao",
+                                        tint = if (starValue <= reviewRating) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
                             }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .align(Alignment.End)
-                            .testTag("submit_review_button")
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = when (reviewRating) {
+                                    1 -> "1/5 ★ Dở"
+                                    2 -> "2/5 ★ Tạm được"
+                                    3 -> "3/5 ★ BÌnh thường"
+                                    4 -> "4/5 ★ Phim hay"
+                                    else -> "5/5 ★ Rất tuyệt vời!"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MomoPrimary
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Author input
+                        OutlinedTextField(
+                            value = authorName,
+                            onValueChange = { authorName = it },
+                            label = { Text("Tên người đánh giá") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("review_author_input"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MomoPrimary,
+                                focusedLabelColor = MomoPrimary
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Content input
+                        OutlinedTextField(
+                            value = reviewContent,
+                            onValueChange = { reviewContent = it },
+                            label = { Text("Cảm nhận của bạn về bộ phim...") },
+                            maxLines = 3,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(100.dp)
+                                .testTag("review_content_input"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MomoPrimary,
+                                focusedLabelColor = MomoPrimary
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = {
+                                val nameToUse = authorName.ifBlank { userName.ifBlank { "Khán giả Neon" } }
+                                if (reviewContent.isNotBlank()) {
+                                    viewModel.submitReview(nameToUse, reviewRating, reviewContent)
+                                    reviewContent = ""
+                                    reviewRating = 5
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .testTag("submit_review_button")
+                        ) {
+                            Text("Gửi Đánh Giá", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            } else {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Gửi Đánh Giá", fontWeight = FontWeight.Bold)
+                        Icon(
+                            imageVector = Icons.Rounded.VerifiedUser,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Đánh giá dành cho khán giả đã mua vé",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Chỉ những người đã đặt vé cho bộ phim này mới có thể gửi đánh giá để đảm bảo phản hồi trung thực nhất.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
@@ -1848,94 +1935,79 @@ fun BookingFlowScreen(
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
             // STEP 2: CHỌN GHẾ NGỒI (INTERACTIVE MAP)
-            Column {
-                Text(
-                    text = "2. Chọn Ghế Ngồi",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MomoPrimary
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Custom Canvas Screen indicator
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(30.dp),
-                    contentAlignment = Alignment.Center
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Canvas(modifier = Modifier.fillMaxWidth(0.8f).height(15.dp)) {
-                        val path = androidx.compose.ui.graphics.Path().apply {
-                            moveTo(0f, size.height)
-                            quadraticTo(size.width / 2, 0f, size.width, size.height)
+                    Text(
+                        text = "2. Chọn Ghế Ngồi",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MomoPrimary
+                    )
+                    Text(
+                        text = "🚪 Lối vào phòng chiếu",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Custom Screen Indicator with Arc Glow
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .height(24.dp),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val path = androidx.compose.ui.graphics.Path().apply {
+                                moveTo(0f, size.height)
+                                quadraticTo(size.width / 2, 0f, size.width, size.height)
+                            }
+                            drawPath(
+                                path = path,
+                                color = MomoPrimary,
+                                style = Stroke(width = 3.dp.toPx())
+                            )
                         }
-                        drawPath(
-                            path = path,
-                            color = MomoPrimary.copy(alpha = 0.5f),
-                            style = Stroke(width = 3.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(MomoPrimary.copy(alpha = 0.2f), Color.Transparent)
+                                    )
+                                )
                         )
                     }
                     Text(
                         text = "MÀN HÌNH CHÍNH",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MomoPrimary,
-                        modifier = Modifier.align(Alignment.BottomCenter)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        letterSpacing = 2.sp
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-                // Header indicators for Stairways & Exits
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Subway,
-                            contentDescription = "Stairs Left",
-                            tint = Color(0xFFFFB74D),
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Text(
-                            text = "LỐI CẦU THANG 1 🪜",
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFFB74D)
-                        )
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "LỐI CẦU THANG 2 🪜",
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFFB74D)
-                        )
-                        Icon(
-                            imageVector = Icons.Rounded.Subway,
-                            contentDescription = "Stairs Right",
-                            tint = Color(0xFFFFB74D),
-                            modifier = Modifier.size(13.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Interactive 6x8 seat grid with vivid stairs & aisles
+                // Interactive 6x8 seat grid
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1943,192 +2015,220 @@ fun BookingFlowScreen(
 
                     for (row in rows) {
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
+                            // Row label Left
                             Text(
                                 text = row,
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.Gray,
-                                modifier = Modifier.width(14.dp)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.width(20.dp)
                             )
 
-                            // CẦU THANG BÊN TRÁI (Left Staircase)
-                            Box(
-                                modifier = Modifier
-                                    .width(20.dp)
-                                    .height(30.dp)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(
-                                        brush = Brush.verticalGradient(
-                                            colors = listOf(Color(0xFF2C2D3A), Color(0xFF1E1F2A))
-                                        )
-                                    )
-                                    .border(0.5.dp, Color(0xFFFFB74D).copy(alpha = 0.5f), RoundedCornerShape(3.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    verticalArrangement = Arrangement.SpaceEvenly,
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.fillMaxSize()
-                                ) {
-                                    Box(modifier = Modifier.fillMaxWidth(0.8f).height(2.dp).background(Color(0xFFFFB74D)))
-                                    Box(modifier = Modifier.fillMaxWidth(0.5f).height(1.5.dp).background(Color.White.copy(alpha = 0.6f)))
-                                    Box(modifier = Modifier.fillMaxWidth(0.8f).height(2.dp).background(Color(0xFFFFB74D)))
-                                }
-                            }
+                            Spacer(modifier = Modifier.width(6.dp))
 
                             // Ghế 1 -> 4 (Bên trái)
-                            for (col in 1..4) {
-                                val seatId = "$row$col"
-                                val isSelected = selectedSeats.contains(seatId)
-                                val isBooked = bookedSeats.contains(seatId)
-                                val isVIP = row == "D" || row == "E"
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                for (col in 1..4) {
+                                    val seatId = "$row$col"
+                                    val isSelected = selectedSeats.contains(seatId)
+                                    val isBooked = bookedSeats.contains(seatId)
+                                    val isVIP = row == "D" || row == "E"
+                                    val isCouple = row == "F"
 
-                                Box(
-                                    modifier = Modifier
-                                        .size(30.dp)
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(
-                                            when {
-                                                isBooked -> Color(0xFF555555)
-                                                isSelected -> MomoPrimary
-                                                isVIP -> Color(0xFFBA68C8)
-                                                else -> Color.LightGray.copy(alpha = 0.6f)
+                                    val seatBg = when {
+                                        isBooked -> Color(0xFF333333)
+                                        isSelected -> MomoPrimary
+                                        isCouple -> Color(0xFFE91E63).copy(alpha = 0.85f)
+                                        isVIP -> Color(0xFFFFB300).copy(alpha = 0.85f)
+                                        else -> MaterialTheme.colorScheme.surface
+                                    }
+
+                                    val seatBorder = when {
+                                        isBooked -> BorderStroke(1.dp, Color(0xFF444444))
+                                        isSelected -> BorderStroke(1.5.dp, MomoPrimary)
+                                        isCouple -> BorderStroke(1.dp, Color(0xFFE91E63))
+                                        isVIP -> BorderStroke(1.dp, Color(0xFFFFB300))
+                                        else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .size(width = 28.dp, height = 28.dp)
+                                            .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
+                                            .background(seatBg)
+                                            .border(seatBorder, RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
+                                            .then(
+                                                if (isBooked) Modifier else Modifier.clickable { viewModel.toggleSeat(seatId) }
+                                            )
+                                            .testTag("seat_$seatId"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = if (isBooked) "✕" else "$col",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = when {
+                                                isBooked -> Color.Gray
+                                                isSelected -> Color.White
+                                                isVIP || isCouple -> Color.Black
+                                                else -> MaterialTheme.colorScheme.onSurface
                                             }
                                         )
-                                        .then(
-                                            if (isBooked) Modifier else Modifier.clickable { viewModel.toggleSeat(seatId) }
-                                        )
-                                        .testTag("seat_$seatId"),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = if (isBooked) "X" else "$col",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isBooked) Color.White.copy(alpha = 0.4f) else if (isSelected) Color.White else Color.Black
-                                    )
+                                    }
                                 }
                             }
 
                             // LỐI ĐI TRUNG TÂM (Center Aisle)
                             Box(
                                 modifier = Modifier
-                                    .width(14.dp)
-                                    .height(30.dp),
+                                    .width(24.dp)
+                                    .height(28.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Column(
-                                    verticalArrangement = Arrangement.SpaceBetween,
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.fillMaxHeight().padding(vertical = 4.dp)
-                                ) {
-                                    Box(modifier = Modifier.size(3.dp).clip(CircleShape).background(Color(0xFF00E676)))
-                                    Text("▲", fontSize = 6.sp, color = Color.Gray.copy(alpha = 0.7f))
-                                    Box(modifier = Modifier.size(3.dp).clip(CircleShape).background(Color(0xFF00E676)))
-                                }
+                                Text(
+                                    text = "••",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                                )
                             }
 
                             // Ghế 5 -> 8 (Bên phải)
-                            for (col in 5..8) {
-                                val seatId = "$row$col"
-                                val isSelected = selectedSeats.contains(seatId)
-                                val isBooked = bookedSeats.contains(seatId)
-                                val isVIP = row == "D" || row == "E"
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                for (col in 5..8) {
+                                    val seatId = "$row$col"
+                                    val isSelected = selectedSeats.contains(seatId)
+                                    val isBooked = bookedSeats.contains(seatId)
+                                    val isVIP = row == "D" || row == "E"
+                                    val isCouple = row == "F"
 
-                                Box(
-                                    modifier = Modifier
-                                        .size(30.dp)
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(
-                                            when {
-                                                isBooked -> Color(0xFF555555)
-                                                isSelected -> MomoPrimary
-                                                isVIP -> Color(0xFFBA68C8)
-                                                else -> Color.LightGray.copy(alpha = 0.6f)
+                                    val seatBg = when {
+                                        isBooked -> Color(0xFF333333)
+                                        isSelected -> MomoPrimary
+                                        isCouple -> Color(0xFFE91E63).copy(alpha = 0.85f)
+                                        isVIP -> Color(0xFFFFB300).copy(alpha = 0.85f)
+                                        else -> MaterialTheme.colorScheme.surface
+                                    }
+
+                                    val seatBorder = when {
+                                        isBooked -> BorderStroke(1.dp, Color(0xFF444444))
+                                        isSelected -> BorderStroke(1.5.dp, MomoPrimary)
+                                        isCouple -> BorderStroke(1.dp, Color(0xFFE91E63))
+                                        isVIP -> BorderStroke(1.dp, Color(0xFFFFB300))
+                                        else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .size(width = 28.dp, height = 28.dp)
+                                            .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
+                                            .background(seatBg)
+                                            .border(seatBorder, RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
+                                            .then(
+                                                if (isBooked) Modifier else Modifier.clickable { viewModel.toggleSeat(seatId) }
+                                            )
+                                            .testTag("seat_$seatId"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = if (isBooked) "✕" else "$col",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = when {
+                                                isBooked -> Color.Gray
+                                                isSelected -> Color.White
+                                                isVIP || isCouple -> Color.Black
+                                                else -> MaterialTheme.colorScheme.onSurface
                                             }
                                         )
-                                        .then(
-                                            if (isBooked) Modifier else Modifier.clickable { viewModel.toggleSeat(seatId) }
-                                        )
-                                        .testTag("seat_$seatId"),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = if (isBooked) "X" else "$col",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isBooked) Color.White.copy(alpha = 0.4f) else if (isSelected) Color.White else Color.Black
-                                    )
+                                    }
                                 }
                             }
 
-                            // CẦU THANG BÊN PHẢI (Right Staircase)
-                            Box(
-                                modifier = Modifier
-                                    .width(20.dp)
-                                    .height(30.dp)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(
-                                        brush = Brush.verticalGradient(
-                                            colors = listOf(Color(0xFF2C2D3A), Color(0xFF1E1F2A))
-                                        )
-                                    )
-                                    .border(0.5.dp, Color(0xFFFFB74D).copy(alpha = 0.5f), RoundedCornerShape(3.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    verticalArrangement = Arrangement.SpaceEvenly,
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.fillMaxSize()
-                                ) {
-                                    Box(modifier = Modifier.fillMaxWidth(0.8f).height(2.dp).background(Color(0xFFFFB74D)))
-                                    Box(modifier = Modifier.fillMaxWidth(0.5f).height(1.5.dp).background(Color.White.copy(alpha = 0.6f)))
-                                    Box(modifier = Modifier.fillMaxWidth(0.8f).height(2.dp).background(Color(0xFFFFB74D)))
-                                }
-                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            // Row label Right
+                            Text(
+                                text = row,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.width(20.dp)
+                            )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
                 // Seat Legend Row
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(vertical = 8.dp, horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(Color.LightGray))
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                        )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Thường", fontSize = 10.sp)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFFBA68C8)))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("VIP", fontSize = 10.sp)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(MomoPrimary))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Đang chọn", fontSize = 10.sp)
+                        Text("Thường", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(14.dp, 10.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(Color(0xFF2C2D3A))
-                                .border(0.5.dp, Color(0xFFFFB74D), RoundedCornerShape(2.dp)),
+                                .size(14.dp)
+                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                                .background(Color(0xFFFFB300))
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("VIP", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                                .background(Color(0xFFE91E63))
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Ghế Đôi", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                                .background(MomoPrimary)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Đang chọn", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                                .background(Color(0xFF333333)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Box(modifier = Modifier.fillMaxWidth(0.8f).height(1.5.dp).background(Color(0xFFFFB74D)))
+                            Text("✕", fontSize = 8.sp, color = Color.Gray)
                         }
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Cầu thang 🪜", fontSize = 10.sp)
+                        Text("Đã bán", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             }
