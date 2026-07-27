@@ -416,7 +416,7 @@ fun ShowtimeMovieCard(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
@@ -782,7 +782,7 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             ) {
                 Column {
                     ProfileMenuRow(
@@ -796,28 +796,28 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                             }
                         }
                     )
-                    Divider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp))
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
                     ProfileMenuRow(
                         icon = Icons.Rounded.CardGiftcard,
                         title = "Đổi Quà Tích Điểm",
                         subtitle = "Dùng Neon Points đổi bắp nước miễn phí",
                         onClick = { showRedeemDialog = true }
                     )
-                    Divider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp))
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
                     ProfileMenuRow(
                         icon = Icons.Rounded.Notifications,
                         title = "Hộp Thư Tin Nhắn (${userNotifications.size})",
                         subtitle = "Xem tin nhắn hệ thống, vé đã đặt & xóa tin nhắn per acc",
                         onClick = { showNotificationDialog = true }
                     )
-                    Divider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp))
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
                     ProfileMenuRow(
                         icon = Icons.Rounded.History,
                         title = "Lịch Sử Đặt Vé",
                         subtitle = "Chi tiết lịch sử đặt vé xem phim của bạn",
                         onClick = { viewModel.selectTab(3) } // Di chuyển đến lịch sử đặt vé
                     )
-                    Divider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp))
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
                     ProfileMenuRow(
                         icon = Icons.Rounded.Settings,
                         title = "Quản Trị Lịch Chiếu Phim (Admin)",
@@ -939,7 +939,7 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         ) {
                             Column(
                                 modifier = Modifier.padding(12.dp),
@@ -955,12 +955,13 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                                 Text(
                                     text = "Combo Bắp + Nước Ngọt Neon",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
                                     text = "Yêu cầu đổi: 100 Pts",
                                     fontSize = 11.sp,
-                                    color = Color.Gray
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -1076,7 +1077,7 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                     .fillMaxHeight(0.85f),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             ) {
                 Column(
                     modifier = Modifier
@@ -1101,22 +1102,22 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                                 text = "Quản Trị Lịch Phim",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                         IconButton(onClick = { showAdminMovieDialog = false }) {
-                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Gray)
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     
                     Text(
                         text = "Thiết lập ngày chiếu cho từng phim. Phim quá hạn kết thúc sẽ tự động gỡ bỏ khỏi danh sách hiển thị.",
                         fontSize = 11.sp,
-                        color = Color.Gray,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
 
-                    Divider(color = Color.White.copy(alpha = 0.1f))
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                     // Movie List Configuration
                     LazyColumn(
@@ -1128,7 +1129,7 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
-                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
                                     // Movie Title & Image
@@ -1147,14 +1148,14 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                                                 text = movie.title,
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 13.sp,
-                                                color = Color.White,
+                                                color = MaterialTheme.colorScheme.onSurface,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
                                             Text(
                                                 text = movie.genre,
                                                 fontSize = 11.sp,
-                                                color = Color.Gray
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                     }
@@ -1338,17 +1339,17 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                                     text = "Thông Báo & Tin Nhắn",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
                                     text = "Tài khoản: $userEmail",
                                     fontSize = 11.sp,
-                                    color = Color.Gray
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                         IconButton(onClick = { showNotificationDialog = false }) {
-                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Gray)
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
 
@@ -1379,7 +1380,7 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                         }
                     }
 
-                    Divider(color = Color.White.copy(alpha = 0.1f))
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                     if (userNotifications.isEmpty()) {
                         Box(
@@ -1392,20 +1393,20 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                                 Icon(
                                     imageVector = Icons.Rounded.MarkEmailRead,
                                     contentDescription = "Trống",
-                                    tint = Color.Gray.copy(alpha = 0.5f),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                     modifier = Modifier.size(50.dp)
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
                                     text = "Hộp thư thông báo trống!",
                                     style = MaterialTheme.typography.titleSmall,
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
                                     text = "Không có tin nhắn nào cho tài khoản này.",
                                     fontSize = 11.sp,
-                                    color = Color.Gray
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -1420,7 +1421,7 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
-                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                                 ) {
                                     Row(
                                         modifier = Modifier
@@ -1469,20 +1470,20 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                                                     text = item.title,
                                                     fontWeight = FontWeight.Bold,
                                                     fontSize = 12.sp,
-                                                    color = Color.White,
+                                                    color = MaterialTheme.colorScheme.onSurface,
                                                     modifier = Modifier.weight(1f)
                                                 )
                                                 Text(
                                                     text = item.timestamp,
                                                     fontSize = 9.sp,
-                                                    color = Color.Gray
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
                                             Spacer(modifier = Modifier.height(4.dp))
                                             Text(
                                                 text = item.message,
                                                 fontSize = 11.sp,
-                                                color = Color.LightGray
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
 
@@ -1870,7 +1871,7 @@ fun MoviesScreen(viewModel: MovieViewModel) {
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .testTag("movies_search_bar"),
-                placeholder = { Text("Tìm tên phim, diễn viên, đạo diễn...", color = Color.Gray) },
+                placeholder = { Text("Tìm tên phim, diễn viên, đạo diễn...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Rounded.Search,
@@ -1884,7 +1885,7 @@ fun MoviesScreen(viewModel: MovieViewModel) {
                             Icon(
                                 imageVector = Icons.Rounded.Close,
                                 contentDescription = "Xóa tìm kiếm",
-                                tint = Color.Gray
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -1893,9 +1894,11 @@ fun MoviesScreen(viewModel: MovieViewModel) {
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = NeonPrimary,
-                    unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
-                    focusedContainerColor = Color.White.copy(alpha = 0.05f),
-                    unfocusedContainerColor = Color.White.copy(alpha = 0.02f)
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         }
@@ -1907,14 +1910,14 @@ fun MoviesScreen(viewModel: MovieViewModel) {
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White.copy(alpha = 0.05f))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(4.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (showNowShowingOnly) NeonPrimary.copy(alpha = 0.85f) else Color.Transparent)
+                        .background(if (showNowShowingOnly) NeonPrimary else Color.Transparent)
                         .clickable { showNowShowingOnly = true }
                         .padding(vertical = 10.dp),
                     contentAlignment = Alignment.Center
@@ -1926,14 +1929,14 @@ fun MoviesScreen(viewModel: MovieViewModel) {
                         Icon(
                             imageVector = Icons.Rounded.PlayCircleFilled,
                             contentDescription = null,
-                            tint = if (showNowShowingOnly) Color.White else Color.Gray,
+                            tint = if (showNowShowingOnly) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
                             text = "Đang Chiếu 🔥",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
-                            color = if (showNowShowingOnly) Color.White else Color.Gray
+                            color = if (showNowShowingOnly) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -1942,7 +1945,7 @@ fun MoviesScreen(viewModel: MovieViewModel) {
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (!showNowShowingOnly) NeonPrimary.copy(alpha = 0.85f) else Color.Transparent)
+                        .background(if (!showNowShowingOnly) NeonPrimary else Color.Transparent)
                         .clickable { showNowShowingOnly = false }
                         .padding(vertical = 10.dp),
                     contentAlignment = Alignment.Center
@@ -1954,14 +1957,14 @@ fun MoviesScreen(viewModel: MovieViewModel) {
                         Icon(
                             imageVector = Icons.Rounded.Upcoming,
                             contentDescription = null,
-                            tint = if (!showNowShowingOnly) Color.White else Color.Gray,
+                            tint = if (!showNowShowingOnly) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
                             text = "Sắp Chiếu 🚀",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
-                            color = if (!showNowShowingOnly) Color.White else Color.Gray
+                            color = if (!showNowShowingOnly) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -1984,8 +1987,8 @@ fun MoviesScreen(viewModel: MovieViewModel) {
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = NeonSecondary.copy(alpha = 0.3f),
                             selectedLabelColor = NeonPrimary,
-                            containerColor = Color.White.copy(alpha = 0.05f),
-                            labelColor = Color.Gray
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         border = FilterChipDefaults.filterChipBorder(
                             borderColor = if (isSelected) NeonPrimary else Color.Transparent,
@@ -2005,7 +2008,7 @@ fun MoviesScreen(viewModel: MovieViewModel) {
             Text(
                 text = "Tìm thấy ${filteredMovies.size} phim tương ứng",
                 style = MaterialTheme.typography.labelMedium,
-                color = Color.Gray,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
             )
         }
@@ -2023,7 +2026,7 @@ fun MoviesScreen(viewModel: MovieViewModel) {
                     Icon(
                         imageVector = Icons.Rounded.MovieFilter,
                         contentDescription = "Trống",
-                        tint = Color.Gray.copy(alpha = 0.5f),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                         modifier = Modifier.size(64.dp)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -2031,13 +2034,13 @@ fun MoviesScreen(viewModel: MovieViewModel) {
                         text = "Không tìm thấy kết quả phù hợp!",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Vui lòng thử từ khóa khác hoặc điều chỉnh bộ lọc thể loại.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -2048,7 +2051,7 @@ fun MoviesScreen(viewModel: MovieViewModel) {
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = NeonPrimary)
                     ) {
-                        Text("Xóa bộ lọc 🔄")
+                        Text("Xóa bộ lọc 🔄", color = Color.White)
                     }
                 }
             }
@@ -2092,8 +2095,9 @@ fun MovieDirectoryItem(
             .clickable { onSelect() }
             .testTag("movie_dir_item_${movie.id}"),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
         Row(
             modifier = Modifier
@@ -2108,7 +2112,7 @@ fun MovieDirectoryItem(
                 modifier = Modifier
                     .size(width = 95.dp, height = 135.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color.White.copy(alpha = 0.05f))
+                    .background(Color.LightGray)
             )
 
             Spacer(modifier = Modifier.width(14.dp))
@@ -2167,7 +2171,7 @@ fun MovieDirectoryItem(
                     text = movie.title,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -2175,7 +2179,7 @@ fun MovieDirectoryItem(
                 Text(
                     text = movie.genre,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(vertical = 1.dp)
@@ -2190,14 +2194,14 @@ fun MovieDirectoryItem(
                         Icon(
                             imageVector = Icons.Rounded.Schedule,
                             contentDescription = null,
-                            tint = Color.Gray,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(13.dp)
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(
                             text = "${movie.duration} phút",
                             fontSize = 12.sp,
-                            color = Color.Gray
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
@@ -2213,7 +2217,7 @@ fun MovieDirectoryItem(
                             text = "${movie.rating}",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -2223,7 +2227,7 @@ fun MovieDirectoryItem(
                 Button(
                     onClick = { onActionClick() },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (movie.isNowShowing) NeonPrimary else Color.White.copy(alpha = 0.12f),
+                        containerColor = if (movie.isNowShowing) NeonPrimary else MaterialTheme.colorScheme.surfaceVariant,
                         contentColor = if (movie.isNowShowing) Color.White else NeonPrimary
                     ),
                     modifier = Modifier

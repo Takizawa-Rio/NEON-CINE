@@ -119,7 +119,7 @@ fun MainMovieApp(
                 TextButton(
                     onClick = { viewModel.dismissLoginRequiredDialog() }
                 ) {
-                    Text("Bỏ qua", color = Color.Gray)
+                    Text("Bỏ qua", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             containerColor = MaterialTheme.colorScheme.surface,
@@ -3097,7 +3097,7 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                     text = "Vui lòng đăng nhập tài khoản thành viên để quản lý và xem lại các vé xem phim đã mua của bạn.",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(
@@ -3119,7 +3119,7 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                 Icon(
                     imageVector = Icons.Rounded.ConfirmationNumber,
                     contentDescription = "Chưa có vé",
-                    tint = Color.Gray,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.size(80.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -3134,7 +3134,7 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                     text = "Hãy chọn những bộ phim cực hot bên tab Mua Vé và trải nghiệm đặt vé nhanh chóng tại Neon Cine nhé!",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(20.dp))
                 Button(
@@ -3225,7 +3225,7 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                             Text(
                                 text = ticket.dateTime,
                                 fontSize = 11.sp,
-                                color = Color.Gray
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -3237,18 +3237,18 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.background)
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                             .padding(12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text("Ghế ngồi", fontSize = 11.sp, color = Color.Gray)
-                            Text(ticket.seats, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("Ghế ngồi", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(ticket.seats, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
                         }
                         if (!ticket.combo.isNullOrBlank()) {
                             Column(horizontalAlignment = Alignment.End) {
-                                Text("Combo", fontSize = 11.sp, color = Color.Gray)
-                                Text(ticket.combo, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Combo", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(ticket.combo, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
                             }
                         }
                     }
@@ -3427,7 +3427,7 @@ fun TicketHistoryItem(ticket: Ticket, viewModel: MovieViewModel, onTicketClick: 
                     Text(
                         text = ticket.dateTime,
                         fontSize = 11.sp,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -3456,11 +3456,11 @@ fun TicketHistoryItem(ticket: Ticket, viewModel: MovieViewModel, onTicketClick: 
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text(text = "Ghế ngồi: ${ticket.seats}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    Text(text = "Combo: ${ticket.combo}", fontSize = 11.sp, color = Color.Gray)
+                    Text(text = "Ghế ngồi: ${ticket.seats}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Text(text = "Combo: ${ticket.combo}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(text = "Tổng thanh toán", fontSize = 10.sp, color = Color.Gray)
+                    Text(text = "Tổng thanh toán", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(text = viewModel.formatCurrency(ticket.totalPrice), fontWeight = FontWeight.ExtraBold, color = MomoPrimary, fontSize = 15.sp)
                 }
             }
