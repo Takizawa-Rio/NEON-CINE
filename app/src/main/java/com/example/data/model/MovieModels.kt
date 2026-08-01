@@ -4,26 +4,29 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.squareup.moshi.Json
 
+
+@Entity(tableName = "movies")
 data class Movie(
-    val id: Int,
+    @PrimaryKey
+    val id: String,
     val title: String,
     val genre: String,
-    val duration: Int, // minutes
-    val rating: Float, // average user rating e.g. 4.8
-    @Json(name = "age_rating") val ageRating: String, // e.g. T18, T16, P
-    @Json(name = "release_date") val releaseDate: String,
+    val duration: Int,
+    val rating: Float?,
+    @Json(name = "age_rating") val ageRating: String,
+    @Json(name = "release_date") val releaseDate: String?,
     val synopsis: String,
     @Json(name = "poster_url") val posterUrl: String,
     @Json(name = "banner_url") val bannerUrl: String,
-    @Json(name = "is_now_showing") val isNowShowing: Boolean = true,
-    val director: String = "N/A",
-    val cast: String = "N/A"
+    @Json(name = "is_now_showing") val isNowShowing: Boolean? = true,
+    val director: String? = "N/A",
+    val cast: String? = "N/A"
 )
 
 @Entity(tableName = "reviews")
 data class Review(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
-    @Json(name = "movie_id") val movieId: Int,
+    @Json(name = "movie_id") val movieId: String,
     val author: String,
     val rating: Int, // 1 to 5 stars
     val content: String,
@@ -33,7 +36,7 @@ data class Review(
 @Entity(tableName = "tickets")
 data class Ticket(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
-    @Json(name = "movie_id") val movieId: Int,
+    @Json(name = "movie_id") val movieId: String,
     @Json(name = "movie_title") val movieTitle: String,
     @Json(name = "movie_poster") val moviePoster: String,
     val cinema: String,
@@ -68,6 +71,5 @@ data class UserNotification(
     val title: String,
     val message: String,
     val timestamp: String,
-    val type: String = "info" // "booking", "promo", "system"
+    val type: String = "info"
 )
-

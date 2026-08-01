@@ -4,11 +4,17 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.example.data.model.Movie
 import com.example.data.model.Review
 import com.example.data.model.Ticket
 import com.example.data.model.PromoCode
 
-@Database(entities = [Review::class, Ticket::class, PromoCode::class], version = 4, exportSchema = false)
+
+@Database(
+    entities = [Movie::class, Review::class, Ticket::class, PromoCode::class],
+    version = 5,
+    exportSchema = false
+)
 abstract class CinemaDatabase : RoomDatabase() {
     abstract fun cinemaDao(): CinemaDao
 
@@ -23,8 +29,8 @@ abstract class CinemaDatabase : RoomDatabase() {
                     CinemaDatabase::class.java,
                     "cinema_database"
                 )
-                .fallbackToDestructiveMigration()
-                .build()
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

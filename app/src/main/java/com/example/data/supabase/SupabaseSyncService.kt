@@ -14,6 +14,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import android.os.Handler
+import android.os.Looper
 
 /**
  * SupabaseSyncService - Bộ đồng bộ hóa dữ liệu thời gian thực giữa ứng dụng Kotlin và Supabase PostgreSQL.
@@ -40,12 +42,13 @@ object SupabaseSyncService {
     /**
      * Đồng bộ danh sách đánh giá của phim từ Supabase table 'reviews'
      */
-    fun fetchReviewsFromSupabase(movieId: Int, onResult: (List<Review>) -> Unit) {
+    fun fetchReviewsFromSupabase(movieId: String, onResult: (List<Review>) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) {
             Log.d(TAG, "Chưa cấu hình Supabase URL. Đang dùng dữ liệu Local cache.")
             return
         }
 
+        // Câu truy vấn Supabase
         val url = "$SUPABASE_URL/rest/v1/reviews?movie_id=eq.$movieId&select=*"
         val request = Request.Builder()
             .url(url)
@@ -56,23 +59,34 @@ object SupabaseSyncService {
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 Log.e(TAG, "Lỗi fetch reviews từ Supabase: ${e.message}")
+                // Trả về list rỗng nếu lỗi (tùy chọn)
+                Handler(Looper.getMainLooper()).post { onResult(emptyList()) }
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     if (!response.isSuccessful) {
                         Log.e(TAG, "Supabase phản hồi lỗi: ${response.code}")
+                        Handler(Looper.getMainLooper()).post { onResult(emptyList()) }
                         return
                     }
+
                     val bodyString = response.body?.string() ?: return
+
                     try {
                         val type = Types.newParameterizedType(List::class.java, Review::class.java)
                         val adapter = moshi.adapter<List<Review>>(type)
                         val reviews = adapter.fromJson(bodyString) ?: emptyList()
-                        onResult(reviews)
+
                         Log.d(TAG, "Fetch thành công ${reviews.size} reviews từ Supabase!")
+
+                        // Đưa kết quả về Main Thread để an toàn khi cập nhật UI
+                        Handler(Looper.getMainLooper()).post {
+                            onResult(reviews)
+                        }
                     } catch (e: Exception) {
                         Log.e(TAG, "Lỗi phân tích JSON Supabase: ${e.message}")
+                        Handler(Looper.getMainLooper()).post { onResult(emptyList()) }
                     }
                 }
             }

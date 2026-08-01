@@ -30,65 +30,12 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = MovieRepository(database.cinemaDao())
     private val prefs = application.getSharedPreferences("neon_cine_prefs", android.content.Context.MODE_PRIVATE)
 
-    private val _movies = MutableStateFlow<List<Movie>>(repository.movies)
-    private val _customMovieDatesTrigger = MutableStateFlow(0)
-
+    // Danh sách phim kết nối trực tiếp từ DB / Supabase
+    private val _movies = MutableStateFlow<List<Movie>>(emptyList())
+    val movies: StateFlow<List<Movie>> = _movies.asStateFlow()
     val rawMoviesList: StateFlow<List<Movie>> = _movies.asStateFlow()
 
-    val movies: StateFlow<List<Movie>> = combine(_movies, _customMovieDatesTrigger) { rawMovies, _ ->
-        val currentDate = Date()
-        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-        
-        rawMovies.mapNotNull { movie ->
-            val customStart = prefs.getString("movie_${movie.id}_start_date", null)
-            val customEnd = prefs.getString("movie_${movie.id}_end_date", null)
-            
-            val startDate = if (!customStart.isNullOrBlank()) {
-                try { sdf.parse(customStart) } catch (e: Exception) { null }
-            } else null
-            
-            val endDate = if (!customEnd.isNullOrBlank()) {
-                try { sdf.parse(customEnd) } catch (e: Exception) { null }
-            } else null
-            
-            // Expiry Check: If end date is set and current date is past the end date (end of that day)
-            if (endDate != null) {
-                val calEnd = Calendar.getInstance().apply {
-                    time = endDate
-                    set(Calendar.HOUR_OF_DAY, 23)
-                    set(Calendar.MINUTE, 59)
-                    set(Calendar.SECOND, 59)
-                    set(Calendar.MILLISECOND, 999)
-                }
-                if (currentDate.after(calEnd.time)) {
-                    // This movie is expired and should be automatically removed (gỡ bỏ)!
-                    return@mapNotNull null
-                }
-            }
-            
-            // Status determination: Now Showing vs Coming Soon
-            val isNowShowingNew = if (startDate != null) {
-                val calStart = Calendar.getInstance().apply {
-                    time = startDate
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                    set(Calendar.MILLISECOND, 0)
-                }
-                currentDate.after(calStart.time) || currentDate.equals(calStart.time)
-            } else {
-                movie.isNowShowing
-            }
-            
-            movie.copy(isNowShowing = isNowShowingNew)
-        }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.Eagerly,
-        initialValue = repository.movies
-    )
-
-    // Lịch sử vé đã đặt
+    // Lịch sử vé đã đặt từ DB
     val tickets: StateFlow<List<Ticket>> = repository.allTickets
         .stateIn(
             scope = viewModelScope,
@@ -96,7 +43,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
-    // Danh sách mã giảm giá trong CSDL
+    // Danh sách mã giảm giá từ DB
     val promoCodes: StateFlow<List<PromoCode>> = repository.allPromoCodes
         .stateIn(
             scope = viewModelScope,
@@ -104,11 +51,11 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
-    // Phim đang được chọn để xem chi tiết
+    // Phim đang chọn xem chi tiết
     private val _selectedMovie = MutableStateFlow<Movie?>(null)
     val selectedMovie: StateFlow<Movie?> = _selectedMovie.asStateFlow()
 
-    // Đánh giá của bộ phim đang chọn
+    // Đánh giá của bộ phim lấy từ DB
     @OptIn(ExperimentalCoroutinesApi::class)
     val currentMovieReviews: StateFlow<List<Review>> = _selectedMovie
         .flatMapLatest { movie ->
@@ -124,19 +71,19 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
-    // Trạng thái AI đánh giá
+    // Trạng thái AI
     private val _aiAnalysisState = MutableStateFlow<AIAnalysisState>(AIAnalysisState.Idle)
     val aiAnalysisState: StateFlow<AIAnalysisState> = _aiAnalysisState.asStateFlow()
 
-    // Trình chọn tab chính (0: Mua vé, 1: Lịch chiếu, 2: Vé của tôi, 3: Tôi)
+    // Tab chính
     private val _currentTab = MutableStateFlow(0)
     val currentTab: StateFlow<Int> = _currentTab.asStateFlow()
 
-    // --- State cho Splash Screen ---
+    // Splash Screen
     private val _showSplashScreen = MutableStateFlow(true)
     val showSplashScreen: StateFlow<Boolean> = _showSplashScreen.asStateFlow()
 
-    // --- State cho Vị Trí Hiện Tại ---
+    // Vị trí người dùng
     private val _userLocationAddress = MutableStateFlow("Quận 1, TP. Hồ Chí Minh")
     val userLocationAddress: StateFlow<String> = _userLocationAddress.asStateFlow()
 
@@ -144,7 +91,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         _userLocationAddress.value = address
     }
 
-    // --- State cho Đăng Nhập & Đăng Ký ---
+    // Đăng Nhập & Tài Khoản
     private val _isLoggedIn = MutableStateFlow(false)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
@@ -165,28 +112,23 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     private val _userName = MutableStateFlow("")
     val userName: StateFlow<String> = _userName.asStateFlow()
 
-    private val _userPoints = MutableStateFlow(150) // Điểm tích lũy thành viên Neon Club
+    private val _userPoints = MutableStateFlow(0)
     val userPoints: StateFlow<Int> = _userPoints.asStateFlow()
 
-    private val _userBalance = MutableStateFlow(500000) // Ví Neon Pay tích hợp 500.000đ mặc định
+    private val _userBalance = MutableStateFlow(0)
     val userBalance: StateFlow<Int> = _userBalance.asStateFlow()
 
-    // --- State cho luồng Đặt Vé ---
+    // Luồng Đặt Vé
     private val _isBookingFlowActive = MutableStateFlow(false)
     val isBookingFlowActive: StateFlow<Boolean> = _isBookingFlowActive.asStateFlow()
 
-    // Cấu hình rạp chiếu cố định (Vincom Xuân Khánh, Cần Thơ)
-    private val _cinemaName = MutableStateFlow("Neon Cine Space - Vincom Xuân Khánh")
+    private val _cinemaName = MutableStateFlow("Neon Cine Space")
     val cinemaName: StateFlow<String> = _cinemaName.asStateFlow()
 
-    private val _cinemaAddress = MutableStateFlow("Tầng 4, TTTM Vincom Plaza Xuân Khánh, 209 Đường 30 Tháng 4, Xuân Khánh, Ninh Kiều, Cần Thơ")
+    private val _cinemaAddress = MutableStateFlow("209 Đường 30 Tháng 4, Xuân Khánh, Ninh Kiều, Cần Thơ")
     val cinemaAddress: StateFlow<String> = _cinemaAddress.asStateFlow()
 
-    private val _cinemaMapQuery = MutableStateFlow("Vincom Plaza Xuan Khanh Can Tho")
-    val cinemaMapQuery: StateFlow<String> = _cinemaMapQuery.asStateFlow()
-
-    // Chi tiết luồng đặt vé
-    private val _selectedCinema = MutableStateFlow("Neon Cine Space - Vincom Xuân Khánh")
+    private val _selectedCinema = MutableStateFlow("Neon Cine Space")
     val selectedCinema: StateFlow<String> = _selectedCinema.asStateFlow()
 
     private val _selectedDate = MutableStateFlow("")
@@ -198,7 +140,6 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedSeats = MutableStateFlow<Set<String>>(emptySet())
     val selectedSeats: StateFlow<Set<String>> = _selectedSeats.asStateFlow()
 
-    // Danh sách ghế đã được đặt cho suất chiếu hiện tại
     val bookedSeats: StateFlow<Set<String>> = combine(
         _selectedMovie,
         _selectedCinema,
@@ -211,8 +152,8 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         allTickets
             .filter { ticket ->
                 ticket.movieId == movie.id &&
-                ticket.cinema == cinema &&
-                ticket.dateTime == dateTimeTarget
+                        ticket.cinema == cinema &&
+                        ticket.dateTime == dateTimeTarget
             }
             .flatMap { ticket ->
                 ticket.seats.split(",").map { it.trim() }
@@ -225,57 +166,44 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         initialValue = emptySet()
     )
 
-    // Số lượng combo bắp nước
-    private val _comboCount = MutableStateFlow(0) // 1 Combo = 1 Bắp + 1 Nước (75,000đ)
+    private val _comboCount = MutableStateFlow(0)
     val comboCount: StateFlow<Int> = _comboCount.asStateFlow()
 
-    // Số lượng combo được đổi bằng điểm tích lũy (mỗi combo = 100 điểm)
     private val _redeemedComboCount = MutableStateFlow(0)
     val redeemedComboCount: StateFlow<Int> = _redeemedComboCount.asStateFlow()
 
-    // Mã khuyến mãi
-    private val _promoDiscount = MutableStateFlow(0) // Số tiền giảm
+    private val _promoDiscount = MutableStateFlow(0)
     val promoDiscount: StateFlow<Int> = _promoDiscount.asStateFlow()
 
     private val _appliedPromoCode = MutableStateFlow<PromoCode?>(null)
     val appliedPromoCode: StateFlow<PromoCode?> = _appliedPromoCode.asStateFlow()
 
-    // Kiểm tra xem mã giảm giá đã dùng chưa
     private val _isPromoCodeUsed = MutableStateFlow(false)
     val isPromoCodeUsed: StateFlow<Boolean> = _isPromoCodeUsed.asStateFlow()
 
-    // Số dư ví giả định của Momo
-    val momoBalance get() = _userBalance.value // Liên kết ví Momo của app cũ với Neon Pay mới
+    val momoBalance get() = _userBalance.value
 
-    // Thông báo tin nhắn từng tài khoản
     private val _userNotifications = MutableStateFlow<List<UserNotification>>(emptyList())
     val userNotifications: StateFlow<List<UserNotification>> = _userNotifications.asStateFlow()
 
     init {
-        // Tắt splash screen sau 2.2 giây
         viewModelScope.launch {
             kotlinx.coroutines.delay(2200)
             _showSplashScreen.value = false
         }
 
-        // Tải thông tin tài khoản đã đăng nhập từ bộ nhớ tạm local
         _isLoggedIn.value = prefs.getBoolean("is_logged_in", false)
         _userEmail.value = prefs.getString("user_email", "") ?: ""
         _userName.value = prefs.getString("user_name", "") ?: ""
-        _userPoints.value = prefs.getInt("user_points", 150)
-        _userBalance.value = prefs.getInt("user_balance", 500000)
+        _userPoints.value = prefs.getInt("user_points", 0)
+        _userBalance.value = prefs.getInt("user_balance", 0)
         _isPromoCodeUsed.value = false
 
         if (_userEmail.value.isNotBlank()) {
             loadNotificationsForUser(_userEmail.value)
         }
 
-        // Khởi tạo đánh giá mặc định
-        viewModelScope.launch {
-            repository.initDefaultDataIfNeeded()
-        }
-
-        // Đồng bộ vé đã đặt và mã giảm giá từ Supabase về Room Local khi mở app
+        // Đồng bộ dữ liệu từ Database / Supabase khi khởi tạo
         viewModelScope.launch {
             try {
                 repository.syncTicketsFromSupabase()
@@ -285,11 +213,9 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Chọn ngày mặc định là hôm nay
         val sdf = SimpleDateFormat("dd/MM", Locale.getDefault())
         _selectedDate.value = sdf.format(Date())
 
-        // Đồng bộ phim từ Supabase
         loadMoviesFromSupabase()
     }
 
@@ -297,7 +223,6 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         com.example.data.supabase.SupabaseSyncService.fetchMoviesFromSupabase { remoteMovies ->
             if (!remoteMovies.isNullOrEmpty()) {
                 _movies.value = remoteMovies
-                // Cập nhật selectedMovie nếu phim đang chọn nằm trong danh sách mới
                 val currentSelected = _selectedMovie.value
                 if (currentSelected != null) {
                     val updatedMovie = remoteMovies.find { it.id == currentSelected.id }
@@ -310,7 +235,6 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshDataFromSupabase() {
-        // Đồng bộ danh sách phim từ Supabase
         loadMoviesFromSupabase()
 
         viewModelScope.launch {
@@ -318,11 +242,10 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
                 repository.syncTicketsFromSupabase()
                 repository.syncPromoCodesFromSupabase()
                 _selectedMovie.value?.id?.let { movieId ->
-                    // Kích hoạt đồng bộ đánh giá cho phim đang xem
                     repository.getReviewsForMovie(movieId)
                 }
             } catch (e: Exception) {
-                android.util.Log.e("MovieViewModel", "Lỗi đồng bộ thủ công: ${e.message}")
+                android.util.Log.e("MovieViewModel", "Lỗi đồng bộ: ${e.message}")
             }
         }
     }
@@ -331,28 +254,20 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         _currentTab.value = tab
     }
 
-    // --- Thao tác Đăng Nhập & Đăng Ký ---
     fun login(email: String, name: String) {
         _isLoggedIn.value = true
         _userEmail.value = email
         val defaultName = if (name.isNotBlank()) name else email.substringBefore("@")
         _userName.value = defaultName
-        _userPoints.value = 150
-        _userBalance.value = 500000
-        _isPromoCodeUsed.value = false
 
-        // Lưu tạm local ngay lập tức
         prefs.edit()
             .putBoolean("is_logged_in", true)
             .putString("user_email", email)
             .putString("user_name", defaultName)
-            .putInt("user_points", 150)
-            .putInt("user_balance", 500000)
             .apply()
 
         loadNotificationsForUser(email)
 
-        // Đồng bộ nâng cao từ Supabase profiles table
         com.example.data.supabase.SupabaseSyncService.fetchProfileFromSupabase(email) { remoteProfile ->
             if (remoteProfile != null) {
                 _userName.value = remoteProfile.name
@@ -365,8 +280,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
                     .putInt("user_balance", remoteProfile.balance)
                     .apply()
             } else {
-                // Nếu chưa có profile trên Supabase, tạo mới để lưu giữ thông tin
-                val profile = UserProfile(email = email, name = defaultName, points = 150, balance = 500000)
+                val profile = UserProfile(email = email, name = defaultName, points = 0, balance = 0)
                 com.example.data.supabase.SupabaseSyncService.pushProfileToSupabase(profile) { }
             }
         }
@@ -376,24 +290,20 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         _isLoggedIn.value = true
         _userName.value = name
         _userEmail.value = email
-        _userPoints.value = 250 // Tặng 250 điểm chào mừng
-        _userBalance.value = 500000 // Ví ban đầu
-        _isPromoCodeUsed.value = false
+        _userPoints.value = 0
+        _userBalance.value = 0
 
-        // Lưu local
         prefs.edit()
             .putBoolean("is_logged_in", true)
             .putString("user_email", email)
             .putString("user_name", name)
-            .putInt("user_points", 250)
-            .putInt("user_balance", 500000)
+            .putInt("user_points", 0)
+            .putInt("user_balance", 0)
             .apply()
 
         loadNotificationsForUser(email)
-        addNotification("🎉 Đăng ký thành viên", "Chào mừng $name! Bạn đã nhận được +250 Neon Points quà mừng hội viên mới.", "system")
 
-        // Đồng bộ lên Supabase profiles table
-        val profile = UserProfile(email = email, name = name, points = 250, balance = 500000)
+        val profile = UserProfile(email = email, name = name, points = 0, balance = 0)
         com.example.data.supabase.SupabaseSyncService.pushProfileToSupabase(profile) { }
     }
 
@@ -401,14 +311,14 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         _isLoggedIn.value = false
         _userEmail.value = ""
         _userName.value = ""
-        _userPoints.value = 150
-        _userBalance.value = 500000
+        _userPoints.value = 0
+        _userBalance.value = 0
         _isPromoCodeUsed.value = false
         _userNotifications.value = emptyList()
         prefs.edit().clear().apply()
     }
 
-    // --- Quản lý Thông báo tin nhắn từng Tài khoản (Acc) ---
+    // Quản lý thông báo người dùng (Đã xóa danh sách mẫu tĩnh)
     fun loadNotificationsForUser(email: String) {
         if (email.isBlank()) {
             _userNotifications.value = emptyList()
@@ -416,30 +326,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         }
         val rawStr = prefs.getString("notifications_$email", null)
         if (rawStr.isNullOrBlank()) {
-            val sdf = SimpleDateFormat("HH:mm - dd/MM", Locale.getDefault())
-            val now = sdf.format(Date())
-            val defaultList = listOf(
-                UserNotification(
-                    title = "🎉 Chào mừng hội viên Neon Cine",
-                    message = "Tài khoản $email đã sẵn sàng. Bạn có thể đặt vé, nhận ưu đãi bắp nước và tích điểm thưởng ngay hôm nay!",
-                    timestamp = now,
-                    type = "system"
-                ),
-                UserNotification(
-                    title = "🎟️ Mã giảm giá vé cực hot",
-                    message = "Sử dụng mã HE2026 hoặc NEON30 tại màn hình thanh toán để nhận ngay ưu đãi giảm giá vé xem phim.",
-                    timestamp = "09:00 - Hôm nay",
-                    type = "promo"
-                ),
-                UserNotification(
-                    title = "🍿 Đổi quà bắp nước miễn phí",
-                    message = "Tích lũy đủ 100 Neon Points để nhận ngay Combo Bắp Nước miễn phí tại quầy rạp Neon Cine.",
-                    timestamp = "08:30 - Hôm nay",
-                    type = "promo"
-                )
-            )
-            saveNotificationsForUser(email, defaultList)
-            _userNotifications.value = defaultList
+            _userNotifications.value = emptyList()
         } else {
             _userNotifications.value = parseNotifications(rawStr)
         }
@@ -513,9 +400,9 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectMovie(movie: Movie?) {
         _selectedMovie.value = movie
-        _aiAnalysisState.value = AIAnalysisState.Idle // Reset trạng thái AI
-        _selectedSeats.value = emptySet() // Reset ghế chọn
-        _comboCount.value = 0 // Reset combo
+        _aiAnalysisState.value = AIAnalysisState.Idle
+        _selectedSeats.value = emptySet()
+        _comboCount.value = 0
     }
 
     fun startBookingFlow() {
@@ -524,7 +411,6 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         _isBookingFlowActive.value = true
-        // Đồng bộ vé mới nhất từ Supabase khi mở luồng đặt vé
         viewModelScope.launch {
             try {
                 repository.syncTicketsFromSupabase()
@@ -540,21 +426,21 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectCinema(cinema: String) {
         _selectedCinema.value = cinema
-        _selectedSeats.value = emptySet() // Reset selected seats when cinema changes
+        _selectedSeats.value = emptySet()
     }
 
     fun selectDate(date: String) {
         _selectedDate.value = date
-        _selectedSeats.value = emptySet() // Reset selected seats when date changes
+        _selectedSeats.value = emptySet()
     }
 
     fun selectTime(time: String) {
         _selectedTime.value = time
-        _selectedSeats.value = emptySet() // Reset selected seats when time changes
+        _selectedSeats.value = emptySet()
     }
 
     fun toggleSeat(seat: String) {
-        if (bookedSeats.value.contains(seat)) return // Ngăn chọn ghế đã được đặt trước đó
+        if (bookedSeats.value.contains(seat)) return
         val current = _selectedSeats.value.toMutableSet()
         if (current.contains(seat)) {
             current.remove(seat)
@@ -603,7 +489,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             .putString("last_check_in_date", today)
             .putInt("user_points", _userPoints.value)
             .apply()
-        
+
         val profile = UserProfile(email = _userEmail.value, name = _userName.value, points = _userPoints.value, balance = _userBalance.value)
         com.example.data.supabase.SupabaseSyncService.pushProfileToSupabase(profile) {}
         addNotification("💎 Điểm danh thành công", "Bạn đã nhận được +20 Neon Points điểm danh ngày hôm nay!", "system")
@@ -619,10 +505,10 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit()
             .putInt("user_points", _userPoints.value)
             .apply()
-        
+
         val profile = UserProfile(email = _userEmail.value, name = _userName.value, points = _userPoints.value, balance = _userBalance.value)
         com.example.data.supabase.SupabaseSyncService.pushProfileToSupabase(profile) {}
-        
+
         val voucherCode = "REDEEM-" + UUID.randomUUID().toString().substring(0, 8).uppercase(Locale.getDefault())
         addNotification("🍿 Đổi bắp nước thành công", "Mã voucher đổi Combo Bắp Nước của bạn: $voucherCode. Đưa mã này cho nhân viên tại quầy.", "promo")
         onResult(voucherCode)
@@ -641,7 +527,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     _promoDiscount.value = promo.discountAmount
                     _appliedPromoCode.value = promo
-                    onResult(null) // Thành công
+                    onResult(null)
                 }
             } else {
                 onResult("Mã giảm giá không hợp lệ hoặc không tồn tại")
@@ -655,11 +541,10 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun calculateTotalPrice(): Int {
-        val ticketPrice = 95000 // Giá vé chuẩn 95.000đ
-        val comboPrice = 75000 // Giá combo chuẩn 75.000đ
-        
+        val ticketPrice = 95000
+        val comboPrice = 75000
+
         val seatsCost = _selectedSeats.value.size * ticketPrice
-        // Trừ đi số combo đã đổi bằng điểm
         val nonRedeemedCombos = maxOf(0, _comboCount.value - _redeemedComboCount.value)
         val comboCost = nonRedeemedCombos * comboPrice
         val total = seatsCost + comboCost - _promoDiscount.value
@@ -671,7 +556,6 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         return format.format(amount).replace("₫", "đ")
     }
 
-    // Đăng bài đánh giá mới
     fun submitReview(author: String, rating: Int, content: String) {
         val movie = _selectedMovie.value ?: return
         if (author.isBlank() || content.isBlank()) return
@@ -687,11 +571,10 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Phân tích đánh giá bằng AI
     fun analyzeReviewsWithAI() {
         val movie = _selectedMovie.value ?: return
         val reviews = currentMovieReviews.value
-        
+
         _aiAnalysisState.value = AIAnalysisState.Loading
 
         viewModelScope.launch {
@@ -704,7 +587,6 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Thanh toán và ghi nhận vé
     fun purchaseTicket(onSuccess: () -> Unit) {
         val movie = _selectedMovie.value ?: return
         val seatsStr = _selectedSeats.value.joinToString(", ")
@@ -717,23 +599,16 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             prefs.edit().putBoolean("promo_used_${_userEmail.value}_${promoToMarkUsed.code}", true).apply()
         }
 
-        // Khấu trừ điểm tích lũy dùng để đổi combo bắp nước (100 điểm / 1 combo)
         val pointsToDeduct = _redeemedComboCount.value * 100
         _userPoints.value = maxOf(0, _userPoints.value - pointsToDeduct)
-        
-        // Cộng điểm thưởng Neon Club khi đặt vé thành công (+50 điểm)
-        _userPoints.value += 50
 
-        // Lưu local
         prefs.edit()
             .putInt("user_points", _userPoints.value)
             .apply()
 
-        // Đồng bộ điểm mới lên Supabase table profiles
         val profile = UserProfile(email = _userEmail.value, name = _userName.value, points = _userPoints.value, balance = _userBalance.value)
         com.example.data.supabase.SupabaseSyncService.pushProfileToSupabase(profile) { }
 
-        // Mô tả bắp nước bao gồm số lượng đổi miễn phí nếu có
         val comboStr = if (_comboCount.value > 0) {
             if (_redeemedComboCount.value > 0) {
                 "${_comboCount.value} Combo (${_redeemedComboCount.value} miễn phí bằng điểm)"
@@ -768,7 +643,6 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
                 type = "booking"
             )
             onSuccess()
-            // Reset trạng thái đặt vé
             _selectedSeats.value = emptySet()
             _comboCount.value = 0
             _redeemedComboCount.value = 0
@@ -776,28 +650,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             _appliedPromoCode.value = null
             _isBookingFlowActive.value = false
             _selectedMovie.value = null
-            _currentTab.value = 3 // Chuyển sang tab "Vé của tôi" (tab số 3) để xem vé vừa đặt!
+            _currentTab.value = 2
         }
-    }
-
-    fun setMovieShowingDates(movieId: Int, startDate: String?, endDate: String?) {
-        prefs.edit().apply {
-            if (startDate != null) putString("movie_${movieId}_start_date", startDate)
-            else remove("movie_${movieId}_start_date")
-            
-            if (endDate != null) putString("movie_${movieId}_end_date", endDate)
-            else remove("movie_${movieId}_end_date")
-        }.apply()
-        
-        // Trigger flow update
-        _customMovieDatesTrigger.value += 1
-    }
-    
-    fun getMovieCustomStartDate(movieId: Int): String {
-        return prefs.getString("movie_${movieId}_start_date", "") ?: ""
-    }
-    
-    fun getMovieCustomEndDate(movieId: Int): String {
-        return prefs.getString("movie_${movieId}_end_date", "") ?: ""
     }
 }

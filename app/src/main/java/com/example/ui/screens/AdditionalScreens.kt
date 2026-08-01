@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -32,19 +35,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.ui.MovieViewModel
 import com.example.ui.theme.*
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+
 /**
  * 1. Splash Screen
  * Hiển thị mở đầu đầy phong cách với logo Neon Cinema và hiệu ứng tải động.
  */
+val MomoPrimaryColor = Color(0xFFA50064)
 @Composable
 fun SplashScreen() {
     var startAnimation by remember { mutableStateOf(false) }
@@ -180,9 +187,12 @@ fun SplashScreen() {
 @Composable
 fun ShowtimesScreen(viewModel: MovieViewModel) {
     val movies by viewModel.movies.collectAsStateWithLifecycle()
-    val cinemaName by viewModel.cinemaName.collectAsStateWithLifecycle()
-    val cinemaAddress by viewModel.cinemaAddress.collectAsStateWithLifecycle()
-    val cinemaMapQuery by viewModel.cinemaMapQuery.collectAsStateWithLifecycle()
+    val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
+
+    // Khai báo thông tin rạp cố định (Tránh lỗi Unresolved reference từ ViewModel)
+    val cinemaName = "Neon Cine Space"
+    val cinemaAddress = "123 Đường 3/2, Q. Ninh Kiều, TP. Cần Thơ"
+    val cinemaMapQuery = "Neon Cine Space Cần Thơ"
 
     val dates = remember {
         val sdf = SimpleDateFormat("dd/MM", Locale.getDefault())
@@ -193,7 +203,6 @@ fun ShowtimesScreen(viewModel: MovieViewModel) {
             dateStr
         }
     }
-    val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
 
     LazyColumn(
         modifier = Modifier
@@ -229,7 +238,7 @@ fun ShowtimesScreen(viewModel: MovieViewModel) {
 
         // Thông tin địa chỉ rạp & Chỉ đường bản đồ
         item {
-            val context = androidx.compose.ui.platform.LocalContext.current
+            val context = LocalContext.current
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -250,13 +259,13 @@ fun ShowtimesScreen(viewModel: MovieViewModel) {
                         modifier = Modifier
                             .size(48.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(MomoPrimary.copy(alpha = 0.15f)),
+                            .background(MomoPrimaryColor.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.LocationOn,
                             contentDescription = "Địa chỉ rạp",
-                            tint = MomoPrimary,
+                            tint = MomoPrimaryColor,
                             modifier = Modifier.size(28.dp)
                         )
                     }
@@ -281,19 +290,19 @@ fun ShowtimesScreen(viewModel: MovieViewModel) {
                     IconButton(
                         onClick = {
                             try {
-                                val encodedQuery = java.net.URLEncoder.encode(cinemaMapQuery, "UTF-8")
-                                val intent = android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query=$encodedQuery")
+                                val encodedQuery = URLEncoder.encode(cinemaMapQuery, "UTF-8")
+                                val intent = Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("https://www.google.com/maps/search/?api=1&query=$encodedQuery")
                                 )
                                 context.startActivity(intent)
                             } catch (e: Exception) {
-                                android.widget.Toast.makeText(context, "Không thể mở ứng dụng bản đồ!", android.widget.Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Không thể mở ứng dụng bản đồ!", Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier
                             .clip(CircleShape)
-                            .background(MomoPrimary)
+                            .background(MomoPrimaryColor)
                             .size(36.dp)
                     ) {
                         Icon(
@@ -322,8 +331,8 @@ fun ShowtimesScreen(viewModel: MovieViewModel) {
                 ) {
                     items(dates) { date ->
                         val isSelected = date == selectedDate
-                        val displayDay = if (date == dates[0]) "Hôm nay" else "Ngày ${date.split("/")[0]}"
-                        
+                        val displayDay = if (date == dates.firstOrNull()) "Hôm nay" else "Ngày ${date.split("/")[0]}"
+
                         Card(
                             onClick = { viewModel.selectDate(date) },
                             modifier = Modifier
@@ -360,7 +369,8 @@ fun ShowtimesScreen(viewModel: MovieViewModel) {
         }
 
         item {
-            Divider(
+            // SỬA LỖI: Divider đổi thành HorizontalDivider cho chuẩn Material 3
+            HorizontalDivider(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
@@ -384,7 +394,6 @@ fun ShowtimesScreen(viewModel: MovieViewModel) {
                     movie = movie,
                     selectedDate = selectedDate,
                     onShowtimeSelected = { time ->
-                        // Thiết lập bộ lọc đặt vé trực tiếp và kích hoạt luồng đặt vé
                         viewModel.selectMovie(movie)
                         viewModel.selectDate(selectedDate)
                         viewModel.selectTime(time)
@@ -1559,11 +1568,24 @@ fun MoviesScreen(viewModel: MovieViewModel) {
 
     val filteredMovies = remember(searchQuery, selectedGenre, showNowShowingOnly, movies) {
         movies.filter { movie ->
-            val matchesSearch = movie.title.contains(searchQuery, ignoreCase = true) ||
-                    movie.director.contains(searchQuery, ignoreCase = true) ||
-                    movie.cast.contains(searchQuery, ignoreCase = true)
-            val matchesGenre = selectedGenre == "Tất cả" || movie.genre.contains(selectedGenre, ignoreCase = true)
-            val matchesShowing = movie.isNowShowing == showNowShowingOnly
+            // 1. Tách biến và gán mặc định chuỗi rỗng "" để chống Null an toàn tuyệt đối
+            val title = movie.title ?: ""
+            val director = movie.director ?: ""
+            val cast = movie.cast ?: ""
+            val genre = movie.genre ?: ""
+            val isNowShowing = movie.isNowShowing == true
+
+            // 2. Kiếm tra theo từ khóa tìm kiếm
+            val matchesSearch = title.contains(searchQuery, ignoreCase = true) ||
+                    director.contains(searchQuery, ignoreCase = true) ||
+                    cast.contains(searchQuery, ignoreCase = true)
+
+            // 3. Kiểm tra theo thể loại
+            val matchesGenre = selectedGenre == "Tất cả" || genre.contains(selectedGenre, ignoreCase = true)
+
+            // 4. Kiểm tra theo tab Đang chiếu / Sắp chiếu
+            val matchesShowing = isNowShowing == showNowShowingOnly
+
             matchesSearch && matchesGenre && matchesShowing
         }
     }
@@ -1664,8 +1686,9 @@ fun MoviesScreen(viewModel: MovieViewModel) {
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // SỬA LỖI 1: PlayCircleFilled -> PlayCircle
                         Icon(
-                            imageVector = Icons.Rounded.PlayCircleFilled,
+                            imageVector = Icons.Rounded.PlayCircle,
                             contentDescription = null,
                             tint = if (showNowShowingOnly) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(16.dp)
@@ -1728,13 +1751,14 @@ fun MoviesScreen(viewModel: MovieViewModel) {
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
                             labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                         ),
+                        // SỬA LỖI 2: Đưa enabled và selected lên trước
                         border = FilterChipDefaults.filterChipBorder(
-                            borderColor = if (isSelected) NeonPrimary else Color.Transparent,
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = Color.Transparent,
                             selectedBorderColor = NeonPrimary,
                             borderWidth = 1.dp,
-                            selectedBorderWidth = 1.5.dp,
-                            enabled = true,
-                            selected = isSelected
+                            selectedBorderWidth = 1.5.dp
                         )
                     )
                 }
@@ -1799,7 +1823,8 @@ fun MoviesScreen(viewModel: MovieViewModel) {
                     movie = movie,
                     onSelect = { viewModel.selectMovie(movie) },
                     onActionClick = {
-                        if (movie.isNowShowing) {
+                        // SỬA LỖI 3: Thêm == true cho movie.isNowShowing
+                        if (movie.isNowShowing == true) {
                             viewModel.selectMovie(movie)
                             viewModel.startBookingFlow()
                         } else {
@@ -1826,6 +1851,9 @@ fun MovieDirectoryItem(
     onSelect: () -> Unit,
     onActionClick: () -> Unit
 ) {
+    // 1. Tạo biến ép kiểu Boolean an toàn ở đây
+    val isNowShowing = movie.isNowShowing == true
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1874,7 +1902,7 @@ fun MovieDirectoryItem(
                             .padding(horizontal = 5.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = movie.ageRating,
+                            text = movie.ageRating ?: "P", // Tránh lỗi null nếu ageRating bị trống
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -1884,21 +1912,21 @@ fun MovieDirectoryItem(
                     Box(
                         modifier = Modifier
                             .background(
-                                color = if (movie.isNowShowing) Color(0xFF4CAF50).copy(alpha = 0.15f) else Color(0xFFFF9800).copy(alpha = 0.15f),
+                                color = if (isNowShowing) Color(0xFF4CAF50).copy(alpha = 0.15f) else Color(0xFFFF9800).copy(alpha = 0.15f),
                                 shape = RoundedCornerShape(4.dp)
                             )
                             .border(
                                 width = 1.dp,
-                                color = if (movie.isNowShowing) Color(0xFF4CAF50) else Color(0xFFFF9800),
+                                color = if (isNowShowing) Color(0xFF4CAF50) else Color(0xFFFF9800),
                                 shape = RoundedCornerShape(4.dp)
                             )
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = if (movie.isNowShowing) "Đang Chiếu" else "Sắp Chiếu",
+                            text = if (isNowShowing) "Đang Chiếu" else "Sắp Chiếu",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (movie.isNowShowing) Color(0xFF4CAF50) else Color(0xFFFF9800)
+                            color = if (isNowShowing) Color(0xFF4CAF50) else Color(0xFFFF9800)
                         )
                     }
                 }
@@ -1965,8 +1993,8 @@ fun MovieDirectoryItem(
                 Button(
                     onClick = { onActionClick() },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (movie.isNowShowing) NeonPrimary else MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = if (movie.isNowShowing) Color.White else NeonPrimary
+                        containerColor = if (isNowShowing) NeonPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (isNowShowing) Color.White else NeonPrimary
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1980,13 +2008,13 @@ fun MovieDirectoryItem(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         Icon(
-                            imageVector = if (movie.isNowShowing) Icons.Rounded.ConfirmationNumber else Icons.Rounded.NotificationsActive,
+                            imageVector = if (isNowShowing) Icons.Rounded.ConfirmationNumber else Icons.Rounded.NotificationsActive,
                             contentDescription = null,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (movie.isNowShowing) "Đặt Vé Ngay ⚡" else "Nhận Nhắc Nhở 🔔",
+                            text = if (isNowShowing) "Đặt Vé Ngay ⚡" else "Nhận Nhắc Nhở 🔔",
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp
                         )
