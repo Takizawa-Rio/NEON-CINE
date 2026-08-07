@@ -439,4 +439,95 @@ object SupabaseSyncService {
             }
         })
     }
+
+    /**
+     * Đồng bộ danh sách lịch chiếu (showtimes) từ Supabase table 'showtimes'
+     */
+    fun fetchShowtimesFromSupabase(onResult: (List<com.example.data.model.Showtime>) -> Unit) {
+        if (SUPABASE_URL.contains("your-project-id")) {
+            onResult(emptyList())
+            return
+        }
+
+        val url = "$SUPABASE_URL/rest/v1/showtimes?select=*"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("apikey", SUPABASE_ANON_KEY)
+            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e(TAG, "Lỗi fetch showtimes từ Supabase: ${e.message}")
+                onResult(emptyList())
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!response.isSuccessful) {
+                        Log.e(TAG, "Supabase showtimes phản hồi lỗi: ${response.code}")
+                        onResult(emptyList())
+                        return
+                    }
+                    val bodyString = response.body?.string() ?: ""
+                    try {
+                        val type = Types.newParameterizedType(List::class.java, com.example.data.model.Showtime::class.java)
+                        val adapter = moshi.adapter<List<com.example.data.model.Showtime>>(type)
+                        val showtimes = adapter.fromJson(bodyString) ?: emptyList()
+                        onResult(showtimes)
+                        Log.d(TAG, "Fetch thành công ${showtimes.size} showtimes từ Supabase!")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Lỗi phân tích JSON Supabase showtimes: ${e.message}")
+                        onResult(emptyList())
+                    }
+                }
+            }
+        })
+    }
+
+    /**
+     * Đồng bộ danh sách đặt chỗ (bookings) từ Supabase table 'bookings'
+     */
+    fun fetchBookingsFromSupabase(onResult: (List<com.example.data.model.Booking>) -> Unit) {
+        if (SUPABASE_URL.contains("your-project-id")) {
+            onResult(emptyList())
+            return
+        }
+
+        val url = "$SUPABASE_URL/rest/v1/bookings?select=*"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("apikey", SUPABASE_ANON_KEY)
+            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e(TAG, "Lỗi fetch bookings từ Supabase: ${e.message}")
+                onResult(emptyList())
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!response.isSuccessful) {
+                        Log.e(TAG, "Supabase bookings phản hồi lỗi: ${response.code}")
+                        onResult(emptyList())
+                        return
+                    }
+                    val bodyString = response.body?.string() ?: ""
+                    try {
+                        val type = Types.newParameterizedType(List::class.java, com.example.data.model.Booking::class.java)
+                        val adapter = moshi.adapter<List<com.example.data.model.Booking>>(type)
+                        val bookings = adapter.fromJson(bodyString) ?: emptyList()
+                        onResult(bookings)
+                        Log.d(TAG, "Fetch thành công ${bookings.size} bookings từ Supabase!")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Lỗi phân tích JSON Supabase bookings: ${e.message}")
+                        onResult(emptyList())
+                    }
+                }
+            }
+        })
+    }
 }
+

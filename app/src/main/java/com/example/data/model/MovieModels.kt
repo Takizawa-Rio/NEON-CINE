@@ -17,7 +17,8 @@ data class Movie(
     @Json(name = "banner_url") val bannerUrl: String,
     @Json(name = "is_now_showing") val isNowShowing: Boolean = true,
     val director: String = "N/A",
-    val cast: String = "N/A"
+    val cast: String = "N/A",
+    val price: Int = 95000
 )
 
 @Entity(tableName = "reviews")
@@ -70,4 +71,23 @@ data class UserNotification(
     val timestamp: String,
     val type: String = "info" // "booking", "promo", "system"
 )
+
+data class Showtime(
+    val id: Int = 0,
+    @Json(name = "movie_id") val movieId: Int = 0,
+    @Json(name = "start_time") val startTime: String = "19:00",
+    val price: Int = 95000,
+    val date: String = "",
+    val cinema: String = "Neon Cine Space - Vincom Xuân Khánh"
+)
+
+data class Booking(
+    val id: Int = 0,
+    @Json(name = "movie_id") val movieId: Int = 0,
+    @Json(name = "showtime_id") val showtimeId: Int = 0,
+    val seats: String = "",
+    @Json(name = "total_price") val totalPrice: Int = 0,
+    @Json(name = "user_email") val userEmail: String = ""
+)
+
 

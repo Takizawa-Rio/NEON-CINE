@@ -383,6 +383,7 @@ fun ShowtimesScreen(viewModel: MovieViewModel) {
                 ShowtimeMovieCard(
                     movie = movie,
                     selectedDate = selectedDate,
+                    viewModel = viewModel,
                     onShowtimeSelected = { time ->
                         // Thiết lập bộ lọc đặt vé trực tiếp và kích hoạt luồng đặt vé
                         viewModel.selectMovie(movie)
@@ -404,10 +405,17 @@ fun ShowtimesScreen(viewModel: MovieViewModel) {
 fun ShowtimeMovieCard(
     movie: com.example.data.model.Movie,
     selectedDate: String,
+    viewModel: MovieViewModel? = null,
     onShowtimeSelected: (String) -> Unit
 ) {
-    val showtimes = remember(movie.id) {
-        listOf("09:30", "12:15", "15:00", "17:45", "19:30", "21:15", "23:00")
+    val dbShowtimes = viewModel?.showtimes?.collectAsStateWithLifecycle()?.value
+    val showtimes = remember(movie.id, dbShowtimes) {
+        val listFromDb = dbShowtimes?.filter { it.movieId == movie.id }?.map { it.startTime }?.filter { it.isNotBlank() }
+        if (!listFromDb.isNullOrEmpty()) {
+            listFromDb.distinct()
+        } else {
+            listOf("09:30", "12:15", "15:00", "17:45", "19:30", "21:15", "23:00")
+        }
     }
 
     Card(
@@ -535,14 +543,9 @@ fun ProfileScreen(viewModel: MovieViewModel) {
 fun LoggedInProfileView(viewModel: MovieViewModel) {
     val userName by viewModel.userName.collectAsStateWithLifecycle()
     val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
-    val userPoints by viewModel.userPoints.collectAsStateWithLifecycle()
     val userBalance by viewModel.userBalance.collectAsStateWithLifecycle()
     val userNotifications by viewModel.userNotifications.collectAsStateWithLifecycle()
 
-    var showCheckInDialog by remember { mutableStateOf(false) }
-    var checkInMessage by remember { mutableStateOf("") }
-    var showRedeemDialog by remember { mutableStateOf(false) }
-    var redeemedVoucherCode by remember { mutableStateOf<String?>(null) }
     var showNotificationDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -587,43 +590,31 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                 color = Color.Gray
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
         }
 
-        // Virtual Neon Club Member Card
+        // Wallet & Info Card (Ví Neon Pay & Tài khoản)
         item {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(210.dp)
-                    .shadow(12.dp, RoundedCornerShape(16.dp)),
-                shape = RoundedCornerShape(16.dp)
+                    .shadow(8.dp, RoundedCornerShape(16.dp)),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .fillMaxWidth()
                         .background(
                             brush = Brush.linearGradient(
                                 colors = listOf(Color(0xFF191B2F), Color(0xFF0F101A))
                             )
                         )
-                        .padding(16.dp)
+                        .padding(18.dp)
                 ) {
-                    // Hiệu ứng trang trí góc thẻ
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .size(100.dp)
-                            .background(
-                                brush = Brush.radialGradient(
-                                    colors = listOf(NeonSecondary.copy(alpha = 0.12f), Color.Transparent)
-                                )
-                            )
-                    )
-
                     Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.SpaceBetween
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -632,147 +623,64 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Rounded.MovieFilter,
-                                    contentDescription = "Neon",
+                                    imageVector = Icons.Rounded.AccountBalanceWallet,
+                                    contentDescription = "Wallet",
                                     tint = NeonPrimary,
                                     modifier = Modifier.size(24.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "NEON CLUB",
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 14.sp,
+                                    text = "VÍ TÀI KHOẢN TẢI ỨNG DỤNG",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
                                     color = Color.White,
                                     letterSpacing = 1.sp
                                 )
                             }
                             Text(
-                                text = "HẠNG VÀNG VIP",
+                                text = "ĐÃ XÁC THỰC",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = NeonTertiary,
+                                color = NeonSecondary,
                                 modifier = Modifier
-                                    .background(NeonTertiary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                    .background(NeonSecondary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
 
-                        // Hạng thành viên & Điểm tích lũy
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
                                 Text(
-                                    text = "HẠNG THÀNH VIÊN",
+                                    text = "SODU TÀI KHOẢN (NEON PAY)",
                                     fontSize = 9.sp,
                                     color = Color.White.copy(alpha = 0.5f),
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "GOLD MEMBER",
-                                    fontSize = 18.sp,
+                                    text = viewModel.formatCurrency(userBalance),
+                                    fontSize = 22.sp,
                                     fontWeight = FontWeight.Black,
                                     color = NeonPrimary
                                 )
                             }
-
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text = "ĐIỂM TÍCH LŨY (POINTS)",
-                                    fontSize = 9.sp,
-                                    color = Color.White.copy(alpha = 0.5f),
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "$userPoints Pts",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = NeonSecondary
-                                )
-                            }
-                        }
-
-                        // Progress bar to next combo reward
-                        val progress = (userPoints % 100).toFloat() / 100f
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                            Button(
+                                onClick = { viewModel.topUpWallet(100000) },
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonSecondary),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                             ) {
-                                Text(
-                                    text = "Tiến trình đổi bắp nước miễn phí (100 Pts / combo)",
-                                    fontSize = 9.sp,
-                                    color = Color.White.copy(alpha = 0.6f)
-                                )
-                                Text(
-                                    text = "${userPoints % 100}/100 Pts",
-                                    fontSize = 9.sp,
-                                    color = NeonSecondary,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Text("+ Nạp 100k", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            LinearProgressIndicator(
-                                progress = { progress },
-                                color = NeonSecondary,
-                                trackColor = Color.White.copy(alpha = 0.1f),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(3.dp))
-                            )
-                        }
-
-                        // Barcode scan ở quầy vé thật
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.9f)
-                                    .height(30.dp)
-                                    .background(Color.White)
-                                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                // Vẽ barcode mô phỏng cực chất bằng các vạch đen trắng
-                                Row(
-                                    modifier = Modifier.fillMaxSize(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    val barWidths = listOf(2, 4, 1, 3, 2, 5, 1, 3, 2, 4, 1, 3, 2, 5, 1, 2, 4, 1, 3, 2, 4, 1, 3)
-                                    barWidths.forEach { width ->
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .width(width.dp)
-                                                .background(Color.Black)
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .width((1..2).random().dp)
-                                                .background(Color.White)
-                                        )
-                                    }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "MÃ THÀNH VIÊN: NEON-${userEmail.take(4).uppercase(Locale.getDefault())}",
-                                fontSize = 8.sp,
-                                color = Color.White.copy(alpha = 0.4f),
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
-                            )
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
         }
 
         // Menu tùy chọn
@@ -785,36 +693,17 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
             ) {
                 Column {
                     ProfileMenuRow(
-                        icon = Icons.Rounded.AddCard,
-                        title = "Điểm Danh Hàng Ngày",
-                        subtitle = "Nhận ngay +20 Neon Points miễn phí mỗi ngày",
-                        onClick = {
-                            viewModel.dailyCheckIn { msg ->
-                                checkInMessage = msg
-                                showCheckInDialog = true
-                            }
-                        }
-                    )
-                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
-                    ProfileMenuRow(
-                        icon = Icons.Rounded.CardGiftcard,
-                        title = "Đổi Quà Tích Điểm",
-                        subtitle = "Dùng Neon Points đổi bắp nước miễn phí",
-                        onClick = { showRedeemDialog = true }
-                    )
-                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
-                    ProfileMenuRow(
                         icon = Icons.Rounded.Notifications,
                         title = "Hộp Thư Tin Nhắn (${userNotifications.size})",
-                        subtitle = "Xem tin nhắn hệ thống, vé đã đặt & xóa tin nhắn per acc",
+                        subtitle = "Xem tin nhắn hệ thống, vé đã đặt & xóa tin nhắn",
                         onClick = { showNotificationDialog = true }
                     )
                     Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
                     ProfileMenuRow(
                         icon = Icons.Rounded.History,
                         title = "Lịch Sử Đặt Vé",
-                        subtitle = "Chi tiết lịch sử đặt vé xem phim của bạn",
-                        onClick = { viewModel.selectTab(3) } // Di chuyển đến lịch sử đặt vé
+                        subtitle = "Chi tiết các vé xem phim đã thanh toán của bạn",
+                        onClick = { viewModel.selectTab(3) } // Di chuyển đến tab vé
                     )
                 }
             }
@@ -840,201 +729,6 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
             }
 
             Spacer(modifier = Modifier.height(48.dp))
-        }
-    }
-
-    // Dialog điểm danh hàng ngày
-    if (showCheckInDialog) {
-        Dialog(
-            onDismissRequest = { showCheckInDialog = false }
-        ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Verified,
-                        contentDescription = "Success",
-                        tint = NeonSecondary,
-                        modifier = Modifier.size(60.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Điểm Danh Thành Viên",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = NeonSecondary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = checkInMessage,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = { showCheckInDialog = false },
-                        colors = ButtonDefaults.buttonColors(containerColor = NeonSecondary),
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("Tuyệt vời", color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-    }
-
-    // Dialog đổi quà tích điểm
-    if (showRedeemDialog) {
-        Dialog(
-            onDismissRequest = { 
-                showRedeemDialog = false 
-                redeemedVoucherCode = null
-            }
-        ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "Đổi Quà Neon Points",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = NeonSecondary
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Bạn đang có: $userPoints Pts",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    if (redeemedVoucherCode == null) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Fastfood,
-                                    contentDescription = "Food",
-                                    tint = NeonPrimary,
-                                    modifier = Modifier.size(40.dp)
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "Combo Bắp + Nước Ngọt Neon",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Yêu cầu đổi: 100 Pts",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(20.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { showRedeemDialog = false },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Hủy")
-                            }
-                            Button(
-                                onClick = {
-                                    viewModel.redeemComboFromProfile { code ->
-                                        redeemedVoucherCode = code
-                                    }
-                                },
-                                enabled = userPoints >= 100,
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = NeonSecondary, disabledContainerColor = Color.Gray.copy(alpha = 0.3f))
-                            ) {
-                                Text("Đổi Ngay", color = if (userPoints >= 100) Color.Black else Color.White, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    } else {
-                        // Show voucher barcode/details
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Rounded.QrCode2,
-                                contentDescription = "Voucher code",
-                                tint = NeonPrimary,
-                                modifier = Modifier.size(100.dp)
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = "ĐỔI QUÀ THÀNH CÔNG 🎉",
-                                fontWeight = FontWeight.Bold,
-                                color = NeonSecondary,
-                                fontSize = 14.sp
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.background),
-                                modifier = Modifier.padding(vertical = 10.dp)
-                            ) {
-                                Text(
-                                    text = redeemedVoucherCode ?: "",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 18.sp,
-                                    color = NeonPrimary,
-                                    letterSpacing = 2.sp,
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                )
-                            }
-                            Text(
-                                text = "Vui lòng đưa mã voucher này cho nhân viên tại quầy bắp nước để nhận Combo miễn phí của bạn.",
-                                fontSize = 11.sp,
-                                color = Color.Gray,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(horizontal = 8.dp)
-                            )
-                            Spacer(modifier = Modifier.height(20.dp))
-                            Button(
-                                onClick = { 
-                                    showRedeemDialog = false
-                                    redeemedVoucherCode = null
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = NeonSecondary),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Đóng", color = Color.Black, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -1996,3 +1690,5 @@ fun MovieDirectoryItem(
         }
     }
 }
+
+

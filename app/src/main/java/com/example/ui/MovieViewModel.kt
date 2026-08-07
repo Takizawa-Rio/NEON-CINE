@@ -30,7 +30,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = MovieRepository(database.cinemaDao())
     private val prefs = application.getSharedPreferences("neon_cine_prefs", android.content.Context.MODE_PRIVATE)
 
-    private val _movies = MutableStateFlow<List<Movie>>(repository.movies)
+    private val _movies = MutableStateFlow<List<Movie>>(emptyList())
     private val _customMovieDatesTrigger = MutableStateFlow(0)
 
     val rawMoviesList: StateFlow<List<Movie>> = _movies.asStateFlow()
@@ -198,25 +198,63 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedSeats = MutableStateFlow<Set<String>>(emptySet())
     val selectedSeats: StateFlow<Set<String>> = _selectedSeats.asStateFlow()
 
-    // Danh sách ghế đã được đặt cho suất chiếu hiện tại
+    // Lịch chiếu & đặt chỗ đồng bộ từ Supabase DB
+    private val _showtimes = MutableStateFlow<List<com.example.data.model.Showtime>>(emptyList())
+    val showtimes: StateFlow<List<com.example.data.model.Showtime>> = _showtimes.asStateFlow()
+
+    private val _bookings = MutableStateFlow<List<com.example.data.model.Booking>>(emptyList())
+    val bookings: StateFlow<List<com.example.data.model.Booking>> = _bookings.asStateFlow()
+
+    // Danh sách suất chiếu theo thời gian động từ cơ sở dữ liệu Supabase
+    val availableTimeSlots: StateFlow<List<String>> = combine(_selectedMovie, _showtimes) { movie, list ->
+        if (movie != null) {
+            val movieShowtimes = list.filter { it.movieId == movie.id }.map { it.startTime }.filter { it.isNotBlank() }
+            if (movieShowtimes.isNotEmpty()) {
+                return@combine movieShowtimes.distinct()
+            }
+        }
+        listOf("10:00", "13:30", "16:15", "19:00", "21:30")
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = listOf("10:00", "13:30", "16:15", "19:00", "21:30")
+    )
+
+    // Danh sách ghế đã được đặt cho suất chiếu hiện tại (đồng bộ từ cả tickets & bookings trong Supabase)
     val bookedSeats: StateFlow<Set<String>> = combine(
         _selectedMovie,
         _selectedCinema,
         _selectedDate,
         _selectedTime,
-        tickets
-    ) { movie, cinema, date, time, allTickets ->
+        tickets,
+        _bookings
+    ) { flowArray ->
+        val movie = flowArray[0] as? Movie
+        val cinema = flowArray[1] as? String ?: ""
+        val date = flowArray[2] as? String ?: ""
+        val time = flowArray[3] as? String ?: ""
+        @Suppress("UNCHECKED_CAST")
+        val allTickets = flowArray[4] as? List<Ticket> ?: emptyList()
+        @Suppress("UNCHECKED_CAST")
+        val allBookings = flowArray[5] as? List<com.example.data.model.Booking> ?: emptyList()
+
         if (movie == null) return@combine emptySet<String>()
         val dateTimeTarget = "$date lúc $time"
-        allTickets
+        val seatsFromTickets = allTickets
             .filter { ticket ->
                 ticket.movieId == movie.id &&
-                ticket.cinema == cinema &&
-                ticket.dateTime == dateTimeTarget
+                (ticket.cinema.isEmpty() || ticket.cinema == cinema) &&
+                (ticket.dateTime.isEmpty() || ticket.dateTime.contains(time) || ticket.dateTime == dateTimeTarget)
             }
             .flatMap { ticket ->
                 ticket.seats.split(",").map { it.trim() }
             }
+
+        val seatsFromBookings = allBookings
+            .filter { booking -> booking.movieId == movie.id }
+            .flatMap { booking -> booking.seats.split(",").map { it.trim() } }
+
+        (seatsFromTickets + seatsFromBookings)
             .filter { it.isNotEmpty() }
             .toSet()
     }.stateIn(
@@ -224,6 +262,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptySet()
     )
+
 
     // Số lượng combo bắp nước
     private val _comboCount = MutableStateFlow(0) // 1 Combo = 1 Bắp + 1 Nước (75,000đ)
@@ -289,8 +328,22 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         val sdf = SimpleDateFormat("dd/MM", Locale.getDefault())
         _selectedDate.value = sdf.format(Date())
 
-        // Đồng bộ phim từ Supabase
+        // Đồng bộ phim, suất chiếu & chỗ ngồi đã đặt từ Supabase
         loadMoviesFromSupabase()
+        loadShowtimesAndBookingsFromSupabase()
+    }
+
+    fun loadShowtimesAndBookingsFromSupabase() {
+        com.example.data.supabase.SupabaseSyncService.fetchShowtimesFromSupabase { list ->
+            if (list.isNotEmpty()) {
+                _showtimes.value = list
+            }
+        }
+        com.example.data.supabase.SupabaseSyncService.fetchBookingsFromSupabase { list ->
+            if (list.isNotEmpty()) {
+                _bookings.value = list
+            }
+        }
     }
 
     fun loadMoviesFromSupabase() {
@@ -304,14 +357,23 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
                     if (updatedMovie != null) {
                         _selectedMovie.value = updatedMovie
                     }
+                } else {
+                    _selectedMovie.value = remoteMovies.firstOrNull()
+                }
+            } else if (_movies.value.isEmpty()) {
+                _movies.value = repository.movies
+                if (_selectedMovie.value == null) {
+                    _selectedMovie.value = repository.movies.firstOrNull()
                 }
             }
         }
     }
 
     fun refreshDataFromSupabase() {
-        // Đồng bộ danh sách phim từ Supabase
+        // Đồng bộ danh sách phim, suất chiếu & chỗ ngồi từ Supabase
         loadMoviesFromSupabase()
+        loadShowtimesAndBookingsFromSupabase()
+
 
         viewModelScope.launch {
             try {
@@ -654,14 +716,41 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         _appliedPromoCode.value = null
     }
 
+    fun topUpWallet(amount: Int) {
+        _userBalance.value += amount
+        prefs.edit().putInt("user_balance", _userBalance.value).apply()
+        addNotification("💵 Nạp tiền thành công", "Bạn đã nạp +${formatCurrency(amount)} vào ví Neon Pay. Số dư mới: ${formatCurrency(_userBalance.value)}", "system")
+        val profile = UserProfile(email = _userEmail.value, name = _userName.value, points = _userPoints.value, balance = _userBalance.value)
+        com.example.data.supabase.SupabaseSyncService.pushProfileToSupabase(profile) { }
+    }
+
+    fun getMovieBasePrice(movie: Movie? = _selectedMovie.value): Int {
+        if (movie == null) return 95000
+        val showtime = _showtimes.value.find { it.movieId == movie.id }
+        if (showtime != null && showtime.price > 0) return showtime.price
+        if (movie.price > 0) return movie.price
+        return 95000
+    }
+
+    fun getSeatPrice(seat: String): Int {
+        val basePrice = getMovieBasePrice()
+        val row = seat.take(1).uppercase(Locale.getDefault())
+        return when (row) {
+            "D", "E" -> basePrice + 20000 // VIP
+            "F" -> basePrice + 55000     // Ghế đôi Couple
+            else -> basePrice             // Ghế thường
+        }
+    }
+
+
+    fun calculateSeatsTotal(): Int {
+        return _selectedSeats.value.sumOf { getSeatPrice(it) }
+    }
+
     fun calculateTotalPrice(): Int {
-        val ticketPrice = 95000 // Giá vé chuẩn 95.000đ
-        val comboPrice = 75000 // Giá combo chuẩn 75.000đ
-        
-        val seatsCost = _selectedSeats.value.size * ticketPrice
-        // Trừ đi số combo đã đổi bằng điểm
-        val nonRedeemedCombos = maxOf(0, _comboCount.value - _redeemedComboCount.value)
-        val comboCost = nonRedeemedCombos * comboPrice
+        val comboPrice = 75000 // Giá combo bắp nước chuẩn 75.000đ
+        val seatsCost = calculateSeatsTotal()
+        val comboCost = _comboCount.value * comboPrice
         val total = seatsCost + comboCost - _promoDiscount.value
         return if (total < 0) 0 else total
     }

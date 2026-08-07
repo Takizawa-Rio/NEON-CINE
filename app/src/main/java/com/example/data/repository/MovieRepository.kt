@@ -35,7 +35,8 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
             posterUrl = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&auto=format&fit=crop",
             bannerUrl = "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=800&auto=format&fit=crop",
             director = "Lý Hải",
-            cast = "Thanh Hiền, Trương Minh Cường, Đinh Y Nhung, Quách Ngọc Tuyên, Thanh Thức"
+            cast = "Thanh Hiền, Trương Minh Cường, Đinh Y Nhung, Quách Ngọc Tuyên, Thanh Thức",
+            price = 95000
         ),
         Movie(
             id = 2,
@@ -49,7 +50,8 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
             posterUrl = "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=500&auto=format&fit=crop",
             bannerUrl = "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=800&auto=format&fit=crop",
             director = "Trấn Thành",
-            cast = "Phương Anh Đào, Tuấn Trần, Hồng Đào, Uyển Ân, Quốc Khánh"
+            cast = "Phương Anh Đào, Tuấn Trần, Hồng Đào, Uyển Ân, Quốc Khánh",
+            price = 110000
         ),
         Movie(
             id = 3,
@@ -63,7 +65,8 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
             posterUrl = "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=500&auto=format&fit=crop",
             bannerUrl = "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop",
             director = "Imai Kazuaki",
-            cast = "Wasabi Mizuta, Megumi Ohara, Yumi Kakazu, Subaru Kimura"
+            cast = "Wasabi Mizuta, Megumi Ohara, Yumi Kakazu, Subaru Kimura",
+            price = 85000
         ),
         Movie(
             id = 4,
@@ -77,7 +80,8 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
             posterUrl = "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop",
             bannerUrl = "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop",
             director = "Kelsey Mann",
-            cast = "Amy Poehler, Maya Hawke, Kensington Tallman, Liza Lapira"
+            cast = "Amy Poehler, Maya Hawke, Kensington Tallman, Liza Lapira",
+            price = 100000
         ),
         Movie(
             id = 5,
@@ -92,7 +96,8 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
             bannerUrl = "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop",
             isNowShowing = false,
             director = "Shawn Levy",
-            cast = "Ryan Reynolds, Hugh Jackman, Emma Corrin, Matthew Macfadyen"
+            cast = "Ryan Reynolds, Hugh Jackman, Emma Corrin, Matthew Macfadyen",
+            price = 120000
         ),
         Movie(
             id = 6,
@@ -107,7 +112,8 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
             bannerUrl = "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop",
             isNowShowing = false,
             director = "Chris Renaud",
-            cast = "Steve Carell, Kristen Wiig, Will Ferrell, Joey King"
+            cast = "Steve Carell, Kristen Wiig, Will Ferrell, Joey King",
+            price = 105000
         )
     )
 

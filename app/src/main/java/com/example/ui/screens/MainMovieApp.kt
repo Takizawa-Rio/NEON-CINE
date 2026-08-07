@@ -98,7 +98,7 @@ fun MainMovieApp(
             },
             text = {
                 Text(
-                    text = "Bạn vui lòng đăng nhập hoặc đăng ký tài khoản Neon Club để thực hiện đặt vé và trải nghiệm các tính năng thành viên cực hấp dẫn nhé!",
+                    text = "Bạn vui lòng đăng nhập hoặc đăng ký tài khoản để thực hiện đặt vé và trải nghiệm dịch vụ xem phim nhé!",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -387,6 +387,7 @@ fun HomeScreen(viewModel: MovieViewModel) {
         items(movies) { movie ->
             MovieCardItem(
                 movie = movie,
+                viewModel = viewModel,
                 onSelect = { viewModel.selectMovie(movie) }
             )
         }
@@ -567,8 +568,8 @@ fun MomoHomeHeader(viewModel: MovieViewModel) {
                     modifier = Modifier.padding(vertical = 8.dp)
                 ) {
                     NotificationItem(
-                        title = "🎁 Quà tặng Neon Club",
-                        desc = "Nhận ngay voucher giảm giá 50.000đ khi đặt vé lần đầu tiên qua cổng Supabase Realtime!",
+                        title = "🎁 Ưu Đãi Đặt Vé Sớm",
+                        desc = "Nhận ngay voucher giảm giá 50.000đ khi đặt vé lần đầu tiên qua ứng dụng!",
                         time = "10 phút trước"
                     )
                     NotificationItem(
@@ -577,8 +578,8 @@ fun MomoHomeHeader(viewModel: MovieViewModel) {
                         time = "1 giờ trước"
                     )
                     NotificationItem(
-                        title = "⚡ Nhân đôi tích điểm",
-                        desc = "Đặc quyền thành viên: Tích lũy x2 điểm thưởng khi giao dịch trong khung giờ vàng 12h - 14h.",
+                        title = "⚡ Suất Chiếu Giờ Vàng",
+                        desc = "Giảm giá 15% cho tất cả suất chiếu khung giờ từ 12h - 14h hàng ngày.",
                         time = "Hôm qua"
                     )
                 }
@@ -951,8 +952,11 @@ fun MomoCinemaPartners() {
 @Composable
 fun MovieCardItem(
     movie: Movie,
+    viewModel: MovieViewModel? = null,
     onSelect: () -> Unit
 ) {
+    val basePrice = viewModel?.getMovieBasePrice(movie) ?: 95000
+    val displayPrice = viewModel?.formatCurrency(basePrice) ?: "95.000 đ"
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1055,23 +1059,42 @@ fun MovieCardItem(
                     }
                 }
 
-                // Book Button
-                Button(
-                    onClick = { onSelect() },
-                    colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier
-                        .align(Alignment.End)
-                        .height(34.dp)
-                        .testTag("book_button_${movie.id}")
+                // Price and Book Button Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Mua Vé",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "Giá từ: ",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = displayPrice,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MomoPrimary
+                        )
+                    }
+
+                    Button(
+                        onClick = { onSelect() },
+                        colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .height(34.dp)
+                            .testTag("book_button_${movie.id}")
+                    ) {
+                        Text(
+                            text = "Mua Vé",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
                 }
             }
         }
@@ -1719,7 +1742,7 @@ fun MovieDetailScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "95.000đ",
+                        text = viewModel.formatCurrency(viewModel.getMovieBasePrice(movie)),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MomoPrimary
@@ -1750,6 +1773,7 @@ fun BookingFlowScreen(
     val cinema by viewModel.selectedCinema.collectAsStateWithLifecycle()
     val date by viewModel.selectedDate.collectAsStateWithLifecycle()
     val time by viewModel.selectedTime.collectAsStateWithLifecycle()
+    val availableTimeSlots by viewModel.availableTimeSlots.collectAsStateWithLifecycle()
     val selectedSeats by viewModel.selectedSeats.collectAsStateWithLifecycle()
     val bookedSeats by viewModel.bookedSeats.collectAsStateWithLifecycle()
     val combos by viewModel.comboCount.collectAsStateWithLifecycle()
@@ -1907,7 +1931,7 @@ fun BookingFlowScreen(
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val showtimes = listOf("10:00", "13:30", "16:15", "19:00", "21:30")
+                    val showtimes = availableTimeSlots
                     for (item in showtimes) {
                         val isSelected = time == item
                         Box(
@@ -2185,7 +2209,7 @@ fun BookingFlowScreen(
                                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Thường", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
+                        Text("Thường (${viewModel.formatCurrency(viewModel.getSeatPrice("A1"))})", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
@@ -2195,7 +2219,7 @@ fun BookingFlowScreen(
                                 .background(Color(0xFFFFB300))
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("VIP", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
+                        Text("VIP (${viewModel.formatCurrency(viewModel.getSeatPrice("D1"))})", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
@@ -2205,7 +2229,7 @@ fun BookingFlowScreen(
                                 .background(Color(0xFFE91E63))
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Ghế Đôi", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
+                        Text("Đôi (${viewModel.formatCurrency(viewModel.getSeatPrice("F1"))})", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
@@ -2688,18 +2712,12 @@ fun BookingFlowScreen(
 
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                         Text("Giá vé (${selectedSeats.size}x)", fontSize = 12.sp)
-                                        Text(viewModel.formatCurrency(selectedSeats.size * 95000), fontSize = 12.sp)
+                                        Text(viewModel.formatCurrency(viewModel.calculateSeatsTotal()), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                     if (combos > 0) {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                             Text("Bắp nước combo (${combos}x)", fontSize = 12.sp)
                                             Text(viewModel.formatCurrency(combos * 75000), fontSize = 12.sp)
-                                        }
-                                        if (redeemedCombos > 0) {
-                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                                Text("Đổi điểm Neon (${redeemedCombos}x combo)", fontSize = 12.sp, color = Color(0xFFFFB300))
-                                                Text("-" + viewModel.formatCurrency(redeemedCombos * 75000), fontSize = 12.sp, color = Color(0xFFFFB300))
-                                            }
                                         }
                                     }
                                     if (discount > 0) {
