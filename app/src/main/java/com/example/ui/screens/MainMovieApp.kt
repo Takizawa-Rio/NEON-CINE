@@ -2604,6 +2604,7 @@ fun BookingFlowScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .fillMaxHeight(0.9f)
                         .shadow(16.dp)
                         .testTag("payment_sheet"),
                     shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
@@ -2612,6 +2613,7 @@ fun BookingFlowScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
                             .padding(20.dp)
                     ) {
                         if (!showSuccessAnimation) {
@@ -2867,6 +2869,40 @@ fun BookingFlowScreen(
                                                     unfocusedBorderColor = Color.Gray.copy(alpha = 0.5f)
                                                 ),
                                                 modifier = Modifier.weight(1f)
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.height(6.dp))
+
+                                        Button(
+                                            onClick = {
+                                                isProcessingPayment = true
+                                                val timer = Timer()
+                                                timer.schedule(object : TimerTask() {
+                                                    override fun run() {
+                                                        isProcessingPayment = false
+                                                        showSuccessAnimation = true
+                                                    }
+                                                }, 1500)
+                                            },
+                                            enabled = !isProcessingPayment && cardNumber.isNotBlank() && cardHolder.isNotBlank(),
+                                            colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(48.dp)
+                                                .testTag("confirm_visa_payment_button"),
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Lock,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Xác Nhận Thanh Toán Thẻ Visa (${viewModel.formatCurrency(totalAmount)})",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp
                                             )
                                         }
                                     }
