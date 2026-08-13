@@ -350,21 +350,16 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         com.example.data.supabase.SupabaseSyncService.fetchMoviesFromSupabase { remoteMovies ->
             if (!remoteMovies.isNullOrEmpty()) {
                 _movies.value = remoteMovies
-                // Cập nhật selectedMovie nếu phim đang chọn nằm trong danh sách mới
+                // Cập nhật selectedMovie nếu người dùng đang chủ động xem chi tiết một bộ phim
                 val currentSelected = _selectedMovie.value
                 if (currentSelected != null) {
                     val updatedMovie = remoteMovies.find { it.id == currentSelected.id }
                     if (updatedMovie != null) {
                         _selectedMovie.value = updatedMovie
                     }
-                } else {
-                    _selectedMovie.value = remoteMovies.firstOrNull()
                 }
             } else if (_movies.value.isEmpty()) {
                 _movies.value = repository.movies
-                if (_selectedMovie.value == null) {
-                    _selectedMovie.value = repository.movies.firstOrNull()
-                }
             }
         }
     }
