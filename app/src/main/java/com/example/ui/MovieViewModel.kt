@@ -727,13 +727,28 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         return 95000
     }
 
+    val totalPrice: StateFlow<Int> = combine(
+        _selectedSeats,
+        _comboCount,
+        _promoDiscount
+    ) { seats, combos, discount ->
+        val seatsCost = seats.sumOf { getSeatPrice(it) }
+        val comboCost = combos * 75000
+        val total = seatsCost + comboCost - discount
+        if (total < 0) 0 else total
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = 0
+    )
+
     fun getSeatPrice(seat: String): Int {
         val basePrice = getMovieBasePrice()
         val row = seat.take(1).uppercase(Locale.getDefault())
         return when (row) {
-            "E", "F", "G" -> basePrice + 20000 // VIP
-            "H" -> basePrice + 55000            // Ghế đôi
-            else -> basePrice                  // Ghế thường (A, B, C, D)
+            "E", "F", "G", "H", "I" -> basePrice + 20000 // VIP
+            "J" -> basePrice + 55000                   // Ghế đôi Couple
+            else -> basePrice                          // Ghế thường (A, B, C, D)
         }
     }
 

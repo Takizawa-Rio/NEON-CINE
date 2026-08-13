@@ -557,8 +557,43 @@ object SupabaseSyncService {
                         onResult(bookings)
                         Log.d(TAG, "Fetch thành công ${bookings.size} bookings từ Supabase!")
                     } catch (e: Exception) {
-                        Log.e(TAG, "Lỗi phân tích JSON Supabase bookings: ${e.message}")
-                        onResult(emptyList())
+                        Log.e(TAG, "Lỗi Moshi JSON Supabase bookings: ${e.message}. Thử fallback JSON...")
+                        try {
+                            val jsonArray = org.json.JSONArray(bodyString)
+                            val list = mutableListOf<com.example.data.model.Booking>()
+                            for (i in 0 until jsonArray.length()) {
+                                val obj = jsonArray.getJSONObject(i)
+                                val seatsVal = obj.optString("seats", "")
+                                val idVal = obj.opt("id")
+                                val intId = when (idVal) {
+                                    is Int -> idVal
+                                    is Number -> idVal.toInt()
+                                    is String -> idVal.toIntOrNull() ?: kotlin.math.abs(idVal.hashCode())
+                                    else -> i + 1
+                                }
+                                val mIdVal = obj.opt("movie_id")
+                                val intMId = when (mIdVal) {
+                                    is Int -> mIdVal
+                                    is Number -> mIdVal.toInt()
+                                    is String -> mIdVal.toIntOrNull() ?: kotlin.math.abs(mIdVal.hashCode())
+                                    else -> 0
+                                }
+                                list.add(
+                                    com.example.data.model.Booking(
+                                        id = intId,
+                                        movieId = intMId,
+                                        showtimeId = obj.optInt("showtime_id", 0),
+                                        seats = seatsVal,
+                                        totalPrice = obj.optInt("total_price", 0),
+                                        userEmail = obj.optString("user_email", "")
+                                    )
+                                )
+                            }
+                            onResult(list)
+                        } catch (ex: Exception) {
+                            Log.e(TAG, "Lỗi fallback JSON Supabase bookings: ${ex.message}")
+                            onResult(emptyList())
+                        }
                     }
                 }
             }

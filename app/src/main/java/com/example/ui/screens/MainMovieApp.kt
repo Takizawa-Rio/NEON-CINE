@@ -1799,7 +1799,7 @@ fun BookingFlowScreen(
 
     if (movie == null) return
 
-    val totalAmount = viewModel.calculateTotalPrice()
+    val totalAmount by viewModel.totalPrice.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -2044,7 +2044,7 @@ fun BookingFlowScreen(
                             .fillMaxWidth()
                             .padding(vertical = 14.dp, horizontal = 4.dp)
                     ) {
-                        val rows = listOf("A", "B", "C", "D", "E", "F", "G", "H")
+                        val rows = listOf("A", "B", "C", "D", "E", "F", "G", "H", "I", "J")
 
                         for (row in rows) {
                             Row(
@@ -2059,19 +2059,19 @@ fun BookingFlowScreen(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center,
-                                    modifier = Modifier.width(20.dp)
+                                    modifier = Modifier.width(18.dp)
                                 )
 
                                 Spacer(modifier = Modifier.width(2.dp))
 
-                                // Ghế 1 -> 4 (Bên trái)
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    for (col in 1..4) {
+                                // Ghế 1 -> 5 (Bên trái)
+                                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    for (col in 1..5) {
                                         val seatId = "$row$col"
                                         val isSelected = selectedSeats.contains(seatId)
                                         val isBooked = bookedSeats.contains(seatId)
-                                        val isVIP = row == "E" || row == "F" || row == "G"
-                                        val isCouple = row == "H"
+                                        val isVIP = row == "E" || row == "F" || row == "G" || row == "H" || row == "I"
+                                        val isCouple = row == "J"
 
                                         val seatBg = when {
                                             isBooked -> Color(0xFF333333)
@@ -2091,10 +2091,10 @@ fun BookingFlowScreen(
 
                                         Box(
                                             modifier = Modifier
-                                                .size(width = 28.dp, height = 28.dp)
-                                                .clip(RoundedCornerShape(6.dp))
+                                                .size(width = 24.dp, height = 24.dp)
+                                                .clip(RoundedCornerShape(5.dp))
                                                 .background(seatBg)
-                                                .border(seatBorder, RoundedCornerShape(6.dp))
+                                                .border(seatBorder, RoundedCornerShape(5.dp))
                                                 .then(
                                                     if (isBooked) Modifier else Modifier.clickable { viewModel.toggleSeat(seatId) }
                                                 )
@@ -2103,7 +2103,7 @@ fun BookingFlowScreen(
                                         ) {
                                             Text(
                                                 text = if (isBooked) "✕" else "$col",
-                                                fontSize = 11.sp,
+                                                fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = when {
                                                     isBooked -> Color.Gray
@@ -2119,25 +2119,25 @@ fun BookingFlowScreen(
                                 // LỐI ĐI TRUNG TÂM (Center Aisle)
                                 Box(
                                     modifier = Modifier
-                                        .width(20.dp)
-                                        .height(28.dp),
+                                        .width(12.dp)
+                                        .height(24.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "••",
+                                        text = "•",
                                         fontSize = 10.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
                                     )
                                 }
 
-                                // Ghế 5 -> 8 (Bên phải)
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    for (col in 5..8) {
+                                // Ghế 6 -> 10 (Bên phải)
+                                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    for (col in 6..10) {
                                         val seatId = "$row$col"
                                         val isSelected = selectedSeats.contains(seatId)
                                         val isBooked = bookedSeats.contains(seatId)
-                                        val isVIP = row == "E" || row == "F" || row == "G"
-                                        val isCouple = row == "H"
+                                        val isVIP = row == "E" || row == "F" || row == "G" || row == "H" || row == "I"
+                                        val isCouple = row == "J"
 
                                         val seatBg = when {
                                             isBooked -> Color(0xFF333333)
@@ -2157,10 +2157,10 @@ fun BookingFlowScreen(
 
                                         Box(
                                             modifier = Modifier
-                                                .size(width = 28.dp, height = 28.dp)
-                                                .clip(RoundedCornerShape(6.dp))
+                                                .size(width = 24.dp, height = 24.dp)
+                                                .clip(RoundedCornerShape(5.dp))
                                                 .background(seatBg)
-                                                .border(seatBorder, RoundedCornerShape(6.dp))
+                                                .border(seatBorder, RoundedCornerShape(5.dp))
                                                 .then(
                                                     if (isBooked) Modifier else Modifier.clickable { viewModel.toggleSeat(seatId) }
                                                 )
@@ -2169,7 +2169,7 @@ fun BookingFlowScreen(
                                         ) {
                                             Text(
                                                 text = if (isBooked) "✕" else "$col",
-                                                fontSize = 11.sp,
+                                                fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = when {
                                                     isBooked -> Color.Gray
@@ -2191,7 +2191,7 @@ fun BookingFlowScreen(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center,
-                                    modifier = Modifier.width(20.dp)
+                                    modifier = Modifier.width(18.dp)
                                 )
                             }
                         }
@@ -2248,7 +2248,7 @@ fun BookingFlowScreen(
                                         .background(Color(0xFFE91E63))
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
-                                Text("Đôi: ${viewModel.formatCurrency(viewModel.getSeatPrice("H1"))}", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                Text("Đôi: ${viewModel.formatCurrency(viewModel.getSeatPrice("J1"))}", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                             }
                         }
 
@@ -2551,15 +2551,14 @@ fun BookingFlowScreen(
                 ) {
                     Column {
                         Text(
-                            text = if (selectedSeats.isEmpty()) "Đơn giá vé (Chưa chọn ghế)" else "Tổng tiền (${selectedSeats.size} ghế)",
+                            text = if (selectedSeats.isEmpty()) "Chưa chọn ghế" else "Tạm tính (${selectedSeats.size} ghế)",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             text = if (selectedSeats.isEmpty()) {
-                                val basePrice = viewModel.getMovieBasePrice(movie)
                                 val comboCost = combos * 75000
-                                viewModel.formatCurrency((basePrice + comboCost - discount).coerceAtLeast(0))
+                                if (comboCost > 0) viewModel.formatCurrency((comboCost - discount).coerceAtLeast(0)) else "0đ"
                             } else {
                                 viewModel.formatCurrency(totalAmount)
                             },
