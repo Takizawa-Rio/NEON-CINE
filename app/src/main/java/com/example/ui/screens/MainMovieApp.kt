@@ -2044,7 +2044,7 @@ fun BookingFlowScreen(
                             .fillMaxWidth()
                             .padding(vertical = 14.dp, horizontal = 4.dp)
                     ) {
-                        val rows = listOf("A", "B", "C", "D", "E", "F")
+                        val rows = listOf("A", "B", "C", "D", "E", "F", "G", "H")
 
                         for (row in rows) {
                             Row(
@@ -2070,8 +2070,8 @@ fun BookingFlowScreen(
                                         val seatId = "$row$col"
                                         val isSelected = selectedSeats.contains(seatId)
                                         val isBooked = bookedSeats.contains(seatId)
-                                        val isVIP = row == "D" || row == "E"
-                                        val isCouple = row == "F"
+                                        val isVIP = row == "E" || row == "F" || row == "G"
+                                        val isCouple = row == "H"
 
                                         val seatBg = when {
                                             isBooked -> Color(0xFF333333)
@@ -2136,8 +2136,8 @@ fun BookingFlowScreen(
                                         val seatId = "$row$col"
                                         val isSelected = selectedSeats.contains(seatId)
                                         val isBooked = bookedSeats.contains(seatId)
-                                        val isVIP = row == "D" || row == "E"
-                                        val isCouple = row == "F"
+                                        val isVIP = row == "E" || row == "F" || row == "G"
+                                        val isCouple = row == "H"
 
                                         val seatBg = when {
                                             isBooked -> Color(0xFF333333)
@@ -2238,7 +2238,7 @@ fun BookingFlowScreen(
                                         .background(Color(0xFFFFB300))
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
-                                Text("VIP: ${viewModel.formatCurrency(viewModel.getSeatPrice("D1"))}", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                Text("VIP: ${viewModel.formatCurrency(viewModel.getSeatPrice("E1"))}", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
@@ -2248,7 +2248,7 @@ fun BookingFlowScreen(
                                         .background(Color(0xFFE91E63))
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
-                                Text("Đôi: ${viewModel.formatCurrency(viewModel.getSeatPrice("F1"))}", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                Text("Đôi: ${viewModel.formatCurrency(viewModel.getSeatPrice("H1"))}", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                             }
                         }
 

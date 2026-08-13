@@ -318,8 +318,43 @@ object SupabaseSyncService {
                         val moviesList = adapter.fromJson(bodyString)
                         onResult(moviesList)
                     } catch (e: Exception) {
-                        Log.e(TAG, "Lỗi phân tích JSON Supabase movies: ${e.message}")
-                        onResult(null)
+                        Log.e(TAG, "Lỗi phân tích Moshi JSON Supabase movies: ${e.message}. Thử fallback JSON...")
+                        try {
+                            val jsonArray = org.json.JSONArray(bodyString)
+                            val list = mutableListOf<Movie>()
+                            for (i in 0 until jsonArray.length()) {
+                                val obj = jsonArray.getJSONObject(i)
+                                val idVal = obj.opt("id")
+                                val intId = when (idVal) {
+                                    is Int -> idVal
+                                    is Number -> idVal.toInt()
+                                    is String -> idVal.toIntOrNull() ?: kotlin.math.abs(idVal.hashCode())
+                                    else -> i + 1
+                                }
+                                list.add(
+                                    Movie(
+                                        id = intId,
+                                        title = obj.optString("title", "Phim Mới"),
+                                        genre = obj.optString("genre", "Phim"),
+                                        duration = obj.optInt("duration", 120),
+                                        rating = obj.optDouble("rating", 4.5).toFloat(),
+                                        ageRating = if (obj.has("age_rating")) obj.optString("age_rating") else obj.optString("ageRating", "T18"),
+                                        releaseDate = if (obj.has("release_date")) obj.optString("release_date") else obj.optString("releaseDate", "2026"),
+                                        synopsis = obj.optString("synopsis", ""),
+                                        posterUrl = if (obj.has("poster_url")) obj.optString("poster_url") else obj.optString("posterUrl", ""),
+                                        bannerUrl = if (obj.has("banner_url")) obj.optString("banner_url") else obj.optString("bannerUrl", ""),
+                                        isNowShowing = if (obj.has("is_now_showing")) obj.optBoolean("is_now_showing") else obj.optBoolean("isNowShowing", true),
+                                        director = obj.optString("director", "Đang cập nhật"),
+                                        cast = obj.optString("cast", "Đang cập nhật"),
+                                        price = obj.optInt("price", 95000)
+                                    )
+                                )
+                            }
+                            onResult(list)
+                        } catch (ex: Exception) {
+                            Log.e(TAG, "Lỗi fallback JSON Supabase movies: ${ex.message}")
+                            onResult(null)
+                        }
                     }
                 }
             }

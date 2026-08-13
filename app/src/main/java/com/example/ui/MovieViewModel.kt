@@ -731,9 +731,9 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         val basePrice = getMovieBasePrice()
         val row = seat.take(1).uppercase(Locale.getDefault())
         return when (row) {
-            "D", "E" -> basePrice + 20000 // VIP
-            "F" -> basePrice + 55000     // Ghế đôi Couple
-            else -> basePrice             // Ghế thường
+            "E", "F", "G" -> basePrice + 20000 // VIP
+            "H" -> basePrice + 55000            // Ghế đôi
+            else -> basePrice                  // Ghế thường (A, B, C, D)
         }
     }
 
