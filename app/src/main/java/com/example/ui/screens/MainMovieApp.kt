@@ -1817,7 +1817,7 @@ fun BookingFlowScreen(
                 Icon(Icons.Default.ArrowBack, contentDescription = "Trở về")
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Mua Vé: ${movie!!.title}",
                     style = MaterialTheme.typography.titleMedium,
@@ -1826,9 +1826,10 @@ fun BookingFlowScreen(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "Chọn rạp, suất chiếu & ghế ngồi",
+                    text = "Giá vé: ${viewModel.formatCurrency(viewModel.getMovieBasePrice(movie))} / vé • Chọn ghế bên dưới",
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    fontWeight = FontWeight.SemiBold,
+                    color = MomoPrimary
                 )
             }
         }
@@ -2615,12 +2616,18 @@ fun BookingFlowScreen(
                 ) {
                     Column {
                         Text(
-                            text = "Tổng tiền thanh toán",
+                            text = if (selectedSeats.isEmpty()) "Đơn giá vé (Chưa chọn ghế)" else "Tổng tiền (${selectedSeats.size} ghế)",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = viewModel.formatCurrency(totalAmount),
+                            text = if (selectedSeats.isEmpty()) {
+                                val basePrice = viewModel.getMovieBasePrice(movie)
+                                val comboCost = combos * 75000
+                                viewModel.formatCurrency((basePrice + comboCost - discount).coerceAtLeast(0))
+                            } else {
+                                viewModel.formatCurrency(totalAmount)
+                            },
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = MomoPrimary
