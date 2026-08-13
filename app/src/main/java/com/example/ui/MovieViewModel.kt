@@ -447,7 +447,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             .apply()
 
         loadNotificationsForUser(email)
-        addNotification("🎉 Đăng ký thành viên", "Chào mừng $name! Bạn đã nhận được +250 Neon Points quà mừng hội viên mới.", "system")
+        addNotification("🎉 Đăng ký thành công", "Chào mừng $name đến với ứng dụng vé xem phim Neon Cine!", "system")
 
         // Đồng bộ lên Supabase profiles table
         val profile = UserProfile(email = email, name = name, points = 250, balance = 500000)
@@ -477,8 +477,8 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             val now = sdf.format(Date())
             val defaultList = listOf(
                 UserNotification(
-                    title = "🎉 Chào mừng hội viên Neon Cine",
-                    message = "Tài khoản $email đã sẵn sàng. Bạn có thể đặt vé, nhận ưu đãi bắp nước và tích điểm thưởng ngay hôm nay!",
+                    title = "🎉 Chào mừng đến với Neon Cine",
+                    message = "Tài khoản $email đã sẵn sàng. Bạn có thể đặt vé phim và thưởng thức bắp nước hấp dẫn ngay hôm nay!",
                     timestamp = now,
                     type = "system"
                 ),
@@ -489,8 +489,8 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
                     type = "promo"
                 ),
                 UserNotification(
-                    title = "🍿 Đổi quà bắp nước miễn phí",
-                    message = "Tích lũy đủ 100 Neon Points để nhận ngay Combo Bắp Nước miễn phí tại quầy rạp Neon Cine.",
+                    title = "🍿 Combo Bắp Nước Ưu Đãi",
+                    message = "Đặt kèm Combo Bắp lớn + Nước ngọt mát lạnh khi mua vé để thưởng thức trọn vẹn bộ phim.",
                     timestamp = "08:30 - Hôm nay",
                     type = "promo"
                 )
@@ -817,16 +817,8 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         val profile = UserProfile(email = _userEmail.value, name = _userName.value, points = _userPoints.value, balance = _userBalance.value)
         com.example.data.supabase.SupabaseSyncService.pushProfileToSupabase(profile) { }
 
-        // Mô tả bắp nước bao gồm số lượng đổi miễn phí nếu có
-        val comboStr = if (_comboCount.value > 0) {
-            if (_redeemedComboCount.value > 0) {
-                "${_comboCount.value} Combo (${_redeemedComboCount.value} miễn phí bằng điểm)"
-            } else {
-                "${_comboCount.value} Combo (Bắp + Nước)"
-            }
-        } else {
-            "Không có"
-        }
+        // Mô tả bắp nước
+        val comboStr = if (_comboCount.value > 0) "${_comboCount.value} Combo (Bắp + Nước)" else "Không có"
         val barcode = "NEON-" + UUID.randomUUID().toString().substring(0, 8).uppercase(Locale.getDefault())
 
         val ticket = Ticket(

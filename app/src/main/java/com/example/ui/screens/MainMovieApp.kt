@@ -2030,7 +2030,7 @@ fun BookingFlowScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Interactive 6x8 seat grid container
+                // Interactive 8x8 seat grid container
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -2059,13 +2059,13 @@ fun BookingFlowScreen(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center,
-                                    modifier = Modifier.width(18.dp)
+                                    modifier = Modifier.width(20.dp)
                                 )
 
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
 
                                 // Ghế 1 -> 4 (Bên trái)
-                                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                     for (col in 1..4) {
                                         val seatId = "$row$col"
                                         val isSelected = selectedSeats.contains(seatId)
@@ -2092,9 +2092,9 @@ fun BookingFlowScreen(
                                         Box(
                                             modifier = Modifier
                                                 .size(width = 28.dp, height = 28.dp)
-                                                .clip(RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
+                                                .clip(RoundedCornerShape(6.dp))
                                                 .background(seatBg)
-                                                .border(seatBorder, RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
+                                                .border(seatBorder, RoundedCornerShape(6.dp))
                                                 .then(
                                                     if (isBooked) Modifier else Modifier.clickable { viewModel.toggleSeat(seatId) }
                                                 )
@@ -2131,7 +2131,7 @@ fun BookingFlowScreen(
                                 }
 
                                 // Ghế 5 -> 8 (Bên phải)
-                                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                     for (col in 5..8) {
                                         val seatId = "$row$col"
                                         val isSelected = selectedSeats.contains(seatId)
@@ -2158,9 +2158,9 @@ fun BookingFlowScreen(
                                         Box(
                                             modifier = Modifier
                                                 .size(width = 28.dp, height = 28.dp)
-                                                .clip(RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
+                                                .clip(RoundedCornerShape(6.dp))
                                                 .background(seatBg)
-                                                .border(seatBorder, RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
+                                                .border(seatBorder, RoundedCornerShape(6.dp))
                                                 .then(
                                                     if (isBooked) Modifier else Modifier.clickable { viewModel.toggleSeat(seatId) }
                                                 )
@@ -2182,7 +2182,7 @@ fun BookingFlowScreen(
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
 
                                 // Row label Right
                                 Text(
@@ -2191,7 +2191,7 @@ fun BookingFlowScreen(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center,
-                                    modifier = Modifier.width(18.dp)
+                                    modifier = Modifier.width(20.dp)
                                 )
                             }
                         }
@@ -2385,101 +2385,6 @@ fun BookingFlowScreen(
                                     tint = Color.White,
                                     modifier = Modifier.size(16.dp)
                                 )
-                            }
-                        }
-                    }
-                }
-
-                if (combos > 0) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, MomoPrimary.copy(alpha = 0.15f))
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.CardGiftcard,
-                                        contentDescription = "Redeem points",
-                                        tint = Color(0xFFFFB300),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Đổi bắp nước bằng Neon Points",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                                Text(
-                                    text = "Dùng 100 Pts / combo. Bạn có: $userPoints Pts",
-                                    fontSize = 11.sp,
-                                    color = Color.Gray
-                                )
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(30.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                    .border(
-                                        width = 1.dp,
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-                                        shape = RoundedCornerShape(30.dp)
-                                    )
-                                    .padding(horizontal = 4.dp, vertical = 2.dp)
-                            ) {
-                                val canIncrement = redeemedCombos < combos && (redeemedCombos + 1) * 100 <= userPoints
-                                IconButton(
-                                    onClick = { viewModel.decrementRedeemedCombo() },
-                                    enabled = redeemedCombos > 0,
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .background(
-                                            color = if (redeemedCombos > 0) Color(0xFFFFB300).copy(alpha = 0.15f) else Color.Transparent,
-                                            shape = CircleShape
-                                        )
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Remove,
-                                        contentDescription = "Bớt",
-                                        tint = if (redeemedCombos > 0) Color(0xFFFFB300) else Color.Gray,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                                Text(
-                                    text = "$redeemedCombos",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 14.sp,
-                                    modifier = Modifier.padding(horizontal = 10.dp)
-                                )
-                                IconButton(
-                                    onClick = { viewModel.incrementRedeemedCombo() },
-                                    enabled = canIncrement,
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .background(
-                                            color = if (canIncrement) Color(0xFFFFB300) else Color.LightGray.copy(alpha = 0.3f),
-                                            shape = CircleShape
-                                        )
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = "Thêm",
-                                        tint = if (canIncrement) Color.White else Color.Gray,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
                             }
                         }
                     }
