@@ -1994,7 +1994,7 @@ fun BookingFlowScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(0.85f)
+                            .fillMaxWidth(0.8f)
                             .height(24.dp),
                         contentAlignment = Alignment.TopCenter
                     ) {
@@ -2028,232 +2028,262 @@ fun BookingFlowScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Interactive 6x8 seat grid
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth()
+                // Interactive 6x8 seat grid container
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 ) {
-                    val rows = listOf("A", "B", "C", "D", "E", "F")
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 14.dp, horizontal = 4.dp)
+                    ) {
+                        val rows = listOf("A", "B", "C", "D", "E", "F")
 
-                    for (row in rows) {
-                        Row(
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            // Row label Left
-                            Text(
-                                text = row,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.width(20.dp)
-                            )
+                        for (row in rows) {
+                            Row(
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                // Row label Left
+                                Text(
+                                    text = row,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.width(18.dp)
+                                )
 
-                            Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
 
-                            // Ghế 1 -> 4 (Bên trái)
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                for (col in 1..4) {
-                                    val seatId = "$row$col"
-                                    val isSelected = selectedSeats.contains(seatId)
-                                    val isBooked = bookedSeats.contains(seatId)
-                                    val isVIP = row == "D" || row == "E"
-                                    val isCouple = row == "F"
+                                // Ghế 1 -> 4 (Bên trái)
+                                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    for (col in 1..4) {
+                                        val seatId = "$row$col"
+                                        val isSelected = selectedSeats.contains(seatId)
+                                        val isBooked = bookedSeats.contains(seatId)
+                                        val isVIP = row == "D" || row == "E"
+                                        val isCouple = row == "F"
 
-                                    val seatBg = when {
-                                        isBooked -> Color(0xFF333333)
-                                        isSelected -> MomoPrimary
-                                        isCouple -> Color(0xFFE91E63).copy(alpha = 0.85f)
-                                        isVIP -> Color(0xFFFFB300).copy(alpha = 0.85f)
-                                        else -> MaterialTheme.colorScheme.surface
-                                    }
+                                        val seatBg = when {
+                                            isBooked -> Color(0xFF333333)
+                                            isSelected -> MomoPrimary
+                                            isCouple -> Color(0xFFE91E63).copy(alpha = 0.85f)
+                                            isVIP -> Color(0xFFFFB300).copy(alpha = 0.85f)
+                                            else -> MaterialTheme.colorScheme.surface
+                                        }
 
-                                    val seatBorder = when {
-                                        isBooked -> BorderStroke(1.dp, Color(0xFF444444))
-                                        isSelected -> BorderStroke(1.5.dp, MomoPrimary)
-                                        isCouple -> BorderStroke(1.dp, Color(0xFFE91E63))
-                                        isVIP -> BorderStroke(1.dp, Color(0xFFFFB300))
-                                        else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                                    }
+                                        val seatBorder = when {
+                                            isBooked -> BorderStroke(1.dp, Color(0xFF444444))
+                                            isSelected -> BorderStroke(1.5.dp, MomoPrimary)
+                                            isCouple -> BorderStroke(1.dp, Color(0xFFE91E63))
+                                            isVIP -> BorderStroke(1.dp, Color(0xFFFFB300))
+                                            else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                        }
 
-                                    Box(
-                                        modifier = Modifier
-                                            .size(width = 28.dp, height = 28.dp)
-                                            .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
-                                            .background(seatBg)
-                                            .border(seatBorder, RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
-                                            .then(
-                                                if (isBooked) Modifier else Modifier.clickable { viewModel.toggleSeat(seatId) }
+                                        Box(
+                                            modifier = Modifier
+                                                .size(width = 28.dp, height = 28.dp)
+                                                .clip(RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
+                                                .background(seatBg)
+                                                .border(seatBorder, RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
+                                                .then(
+                                                    if (isBooked) Modifier else Modifier.clickable { viewModel.toggleSeat(seatId) }
+                                                )
+                                                .testTag("seat_$seatId"),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = if (isBooked) "✕" else "$col",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = when {
+                                                    isBooked -> Color.Gray
+                                                    isSelected -> Color.White
+                                                    isVIP || isCouple -> Color.Black
+                                                    else -> MaterialTheme.colorScheme.onSurface
+                                                }
                                             )
-                                            .testTag("seat_$seatId"),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = if (isBooked) "✕" else "$col",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = when {
-                                                isBooked -> Color.Gray
-                                                isSelected -> Color.White
-                                                isVIP || isCouple -> Color.Black
-                                                else -> MaterialTheme.colorScheme.onSurface
-                                            }
-                                        )
+                                        }
                                     }
                                 }
-                            }
 
-                            // LỐI ĐI TRUNG TÂM (Center Aisle)
-                            Box(
-                                modifier = Modifier
-                                    .width(24.dp)
-                                    .height(28.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
+                                // LỐI ĐI TRUNG TÂM (Center Aisle)
+                                Box(
+                                    modifier = Modifier
+                                        .width(20.dp)
+                                        .height(28.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "••",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
+                                    )
+                                }
+
+                                // Ghế 5 -> 8 (Bên phải)
+                                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    for (col in 5..8) {
+                                        val seatId = "$row$col"
+                                        val isSelected = selectedSeats.contains(seatId)
+                                        val isBooked = bookedSeats.contains(seatId)
+                                        val isVIP = row == "D" || row == "E"
+                                        val isCouple = row == "F"
+
+                                        val seatBg = when {
+                                            isBooked -> Color(0xFF333333)
+                                            isSelected -> MomoPrimary
+                                            isCouple -> Color(0xFFE91E63).copy(alpha = 0.85f)
+                                            isVIP -> Color(0xFFFFB300).copy(alpha = 0.85f)
+                                            else -> MaterialTheme.colorScheme.surface
+                                        }
+
+                                        val seatBorder = when {
+                                            isBooked -> BorderStroke(1.dp, Color(0xFF444444))
+                                            isSelected -> BorderStroke(1.5.dp, MomoPrimary)
+                                            isCouple -> BorderStroke(1.dp, Color(0xFFE91E63))
+                                            isVIP -> BorderStroke(1.dp, Color(0xFFFFB300))
+                                            else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                        }
+
+                                        Box(
+                                            modifier = Modifier
+                                                .size(width = 28.dp, height = 28.dp)
+                                                .clip(RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
+                                                .background(seatBg)
+                                                .border(seatBorder, RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
+                                                .then(
+                                                    if (isBooked) Modifier else Modifier.clickable { viewModel.toggleSeat(seatId) }
+                                                )
+                                                .testTag("seat_$seatId"),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = if (isBooked) "✕" else "$col",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = when {
+                                                    isBooked -> Color.Gray
+                                                    isSelected -> Color.White
+                                                    isVIP || isCouple -> Color.Black
+                                                    else -> MaterialTheme.colorScheme.onSurface
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                // Row label Right
                                 Text(
-                                    text = "••",
-                                    fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                                    text = row,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.width(18.dp)
                                 )
                             }
-
-                            // Ghế 5 -> 8 (Bên phải)
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                for (col in 5..8) {
-                                    val seatId = "$row$col"
-                                    val isSelected = selectedSeats.contains(seatId)
-                                    val isBooked = bookedSeats.contains(seatId)
-                                    val isVIP = row == "D" || row == "E"
-                                    val isCouple = row == "F"
-
-                                    val seatBg = when {
-                                        isBooked -> Color(0xFF333333)
-                                        isSelected -> MomoPrimary
-                                        isCouple -> Color(0xFFE91E63).copy(alpha = 0.85f)
-                                        isVIP -> Color(0xFFFFB300).copy(alpha = 0.85f)
-                                        else -> MaterialTheme.colorScheme.surface
-                                    }
-
-                                    val seatBorder = when {
-                                        isBooked -> BorderStroke(1.dp, Color(0xFF444444))
-                                        isSelected -> BorderStroke(1.5.dp, MomoPrimary)
-                                        isCouple -> BorderStroke(1.dp, Color(0xFFE91E63))
-                                        isVIP -> BorderStroke(1.dp, Color(0xFFFFB300))
-                                        else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                                    }
-
-                                    Box(
-                                        modifier = Modifier
-                                            .size(width = 28.dp, height = 28.dp)
-                                            .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
-                                            .background(seatBg)
-                                            .border(seatBorder, RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
-                                            .then(
-                                                if (isBooked) Modifier else Modifier.clickable { viewModel.toggleSeat(seatId) }
-                                            )
-                                            .testTag("seat_$seatId"),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = if (isBooked) "✕" else "$col",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = when {
-                                                isBooked -> Color.Gray
-                                                isSelected -> Color.White
-                                                isVIP || isCouple -> Color.Black
-                                                else -> MaterialTheme.colorScheme.onSurface
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.width(6.dp))
-
-                            // Row label Right
-                            Text(
-                                text = row,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.width(20.dp)
-                            )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Seat Legend Row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(vertical = 8.dp, horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // Seat Legend Container (2 balanced rows)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(14.dp)
-                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
-                                .background(MaterialTheme.colorScheme.surface)
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Thường (${viewModel.formatCurrency(viewModel.getSeatPrice("A1"))})", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(14.dp)
-                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
-                                .background(Color(0xFFFFB300))
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("VIP (${viewModel.formatCurrency(viewModel.getSeatPrice("D1"))})", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(14.dp)
-                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
-                                .background(Color(0xFFE91E63))
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Đôi (${viewModel.formatCurrency(viewModel.getSeatPrice("F1"))})", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(14.dp)
-                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
-                                .background(MomoPrimary)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Đang chọn", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(14.dp)
-                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
-                                .background(Color(0xFF333333)),
-                            contentAlignment = Alignment.Center
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 10.dp, horizontal = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Row 1: Seat types
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceAround,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("✕", fontSize = 8.sp, color = Color.Gray)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                                        .background(MaterialTheme.colorScheme.surface)
+                                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text("Thường: ${viewModel.formatCurrency(viewModel.getSeatPrice("A1"))}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                                        .background(Color(0xFFFFB300))
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text("VIP: ${viewModel.formatCurrency(viewModel.getSeatPrice("D1"))}", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                                        .background(Color(0xFFE91E63))
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text("Đôi: ${viewModel.formatCurrency(viewModel.getSeatPrice("F1"))}", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                            }
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Đã bán", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
+
+                        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                        // Row 2: Statuses
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                                        .background(MomoPrimary)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Đang chọn", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MomoPrimary)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                                        .background(Color(0xFF333333)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("✕", fontSize = 8.sp, color = Color.Gray)
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Đã bán (Khóa)", fontSize = 11.sp, color = Color.Gray)
+                            }
+                        }
                     }
                 }
             }

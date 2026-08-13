@@ -593,7 +593,7 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
             Spacer(modifier = Modifier.height(20.dp))
         }
 
-        // Wallet & Info Card (Ví Neon Pay & Tài khoản)
+        // Member Info Card (Thẻ Thành Viên Neon Cine)
         item {
             Card(
                 modifier = Modifier
@@ -623,14 +623,14 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Rounded.AccountBalanceWallet,
-                                    contentDescription = "Wallet",
-                                    tint = NeonPrimary,
+                                    imageVector = Icons.Rounded.WorkspacePremium,
+                                    contentDescription = "VIP Member",
+                                    tint = NeonSecondary,
                                     modifier = Modifier.size(24.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "VÍ TÀI KHOẢN TẢI ỨNG DỤNG",
+                                    text = "THÀNH VIÊN NEON VIP",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     color = Color.White,
@@ -638,13 +638,13 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                                 )
                             }
                             Text(
-                                text = "ĐÃ XÁC THỰC",
+                                text = "HẠNG VÀNG",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = NeonSecondary,
                                 modifier = Modifier
                                     .background(NeonSecondary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
 
@@ -655,25 +655,31 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                         ) {
                             Column {
                                 Text(
-                                    text = "SODU TÀI KHOẢN (NEON PAY)",
+                                    text = "ĐIỂM TÍCH LŨY",
                                     fontSize = 9.sp,
                                     color = Color.White.copy(alpha = 0.5f),
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = viewModel.formatCurrency(userBalance),
-                                    fontSize = 22.sp,
+                                    text = "1.250 Điểm",
+                                    fontSize = 20.sp,
                                     fontWeight = FontWeight.Black,
                                     color = NeonPrimary
                                 )
                             }
-                            Button(
-                                onClick = { viewModel.topUpWallet(100000) },
-                                colors = ButtonDefaults.buttonColors(containerColor = NeonSecondary),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text("+ Nạp 100k", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "ƯU ĐÃI THÀNH VIÊN",
+                                    fontSize = 9.sp,
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Giảm 10% Combo",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
                             }
                         }
                     }
