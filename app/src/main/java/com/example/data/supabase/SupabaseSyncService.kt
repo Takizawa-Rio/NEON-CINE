@@ -541,29 +541,58 @@ object SupabaseSyncService {
             val jsonArray = JSONArray(bodyString)
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
-                val id = obj.optInt("id", i + 1)
+                val id = when {
+                    obj.has("id") -> obj.optInt("id", i + 1)
+                    else -> i + 1
+                }
                 val name = when {
                     obj.has("name") -> obj.optString("name")
+                    obj.has("ten") -> obj.optString("ten")
+                    obj.has("ten_san_pham") -> obj.optString("ten_san_pham")
+                    obj.has("ten_combo") -> obj.optString("ten_combo")
                     obj.has("title") -> obj.optString("title")
                     obj.has("combo_name") -> obj.optString("combo_name")
                     else -> "Combo Bắp + Nước"
                 }
-                val price = when {
+                var price = when {
                     obj.has("price") -> obj.optInt("price", 0)
+                    obj.has("gia") -> obj.optInt("gia", 0)
+                    obj.has("gia_tien") -> obj.optInt("gia_tien", 0)
+                    obj.has("don_gia") -> obj.optInt("don_gia", 0)
                     obj.has("combo_price") -> obj.optInt("combo_price", 0)
                     else -> 0
+                }
+                val type = when {
+                    obj.has("type") -> obj.optString("type")
+                    obj.has("loai") -> obj.optString("loai")
+                    name.contains("Nước", ignoreCase = true) || name.contains("Coca", ignoreCase = true) || name.contains("Sprite", ignoreCase = true) -> "drink"
+                    name.contains("Combo", ignoreCase = true) -> "combo"
+                    else -> "snack"
+                }
+                // Nếu bảng Supabase không có cột giá hoặc giá bằng 0, tự động gán giá hợp lý theo tên/loại
+                if (price <= 0) {
+                    price = when {
+                        name.contains("Family", ignoreCase = true) || name.contains("Party", ignoreCase = true) -> 145000
+                        name.contains("Couple", ignoreCase = true) || name.contains("Đôi", ignoreCase = true) -> 95000
+                        name.contains("Combo", ignoreCase = true) -> 65000
+                        name.contains("Nước", ignoreCase = true) || name.contains("Coca", ignoreCase = true) -> 32000
+                        name.contains("Dasani", ignoreCase = true) || name.contains("Suối", ignoreCase = true) -> 20000
+                        else -> 45000
+                    }
                 }
                 val imageUrl = when {
                     obj.has("image_url") -> obj.optString("image_url")
                     obj.has("image") -> obj.optString("image")
+                    obj.has("hinh_anh") -> obj.optString("hinh_anh")
+                    obj.has("anh") -> obj.optString("anh")
                     else -> ""
                 }
                 val desc = when {
                     obj.has("description") -> obj.optString("description")
+                    obj.has("mo_ta") -> obj.optString("mo_ta")
                     obj.has("desc") -> obj.optString("desc")
-                    else -> ""
+                    else -> if (type == "combo") "Bắp rang bơ giòn rụm + nước ngọt mát lạnh" else "Thức ăn / đồ uống phục vụ tại rạp"
                 }
-                val type = obj.optString("type", "combo")
                 list.add(Product(id, name, price, imageUrl, desc, type))
             }
         } catch (e: Exception) {
@@ -784,10 +813,15 @@ object SupabaseSyncService {
                                 obj.has("date") -> obj.optString("date")
                                 else -> ""
                             }
-                            // Nếu show_date là YYYY-MM-DD chuyển thành dd/MM để khớp với UI
-                            if (sDate.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$"))) {
-                                val parts = sDate.split("-")
-                                sDate = "${parts[2]}/${parts[1]}"
+                            // Nếu show_date là YYYY-MM-DD hoặc ISO timestamp chuyển thành dd/MM để khớp với UI
+                            if (sDate.contains("-")) {
+                                val dateOnly = sDate.substringBefore("T").substringBefore(" ").trim()
+                                val parts = dateOnly.split("-")
+                                if (parts.size >= 3) {
+                                    val day = parts[2].padStart(2, '0')
+                                    val month = parts[1].padStart(2, '0')
+                                    sDate = "$day/$month"
+                                }
                             }
                             val rId = when {
                                 obj.has("room_id") -> obj.optString("room_id")

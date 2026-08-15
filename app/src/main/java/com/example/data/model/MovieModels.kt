@@ -108,7 +108,11 @@ data class Showtime(
             val vip = vipPrice?.toInt() ?: 0
             if (vip > 0) return vip
             if (vipPercent != null && effectivePrice > 0) {
-                return (effectivePrice * (1.0 + vipPercent / 100.0)).toInt()
+                return if (vipPercent > 5.0) {
+                    (effectivePrice * (1.0 + vipPercent / 100.0)).toInt()
+                } else {
+                    (effectivePrice * vipPercent).toInt()
+                }
             }
             return effectivePrice
         }

@@ -290,10 +290,59 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     )
 
 
-    val defaultProducts = emptyList<com.example.data.model.Product>()
+    val defaultProducts = listOf(
+        com.example.data.model.Product(
+            id = 1,
+            name = "Combo Solo (1 Bắp Ngọt + 1 Nước L)",
+            price = 65000,
+            imageUrl = "https://images.unsplash.com/photo-1585647347483-22b66260dfff?w=500",
+            description = "1 Bắp rang bơ vị ngọt thơm lừng cỡ vừa + 1 Ly nước ngọt Coca-Cola mát lạnh (32oz)",
+            type = "combo"
+        ),
+        com.example.data.model.Product(
+            id = 2,
+            name = "Combo Couple (1 Bắp Phô Mai L + 2 Nước L)",
+            price = 95000,
+            imageUrl = "https://images.unsplash.com/photo-1572177191856-3cde618dee1f?w=500",
+            description = "1 Bắp rang bơ phô mai đậm đà cỡ lớn + 2 Ly nước ngọt tùy chọn (Coca/Sprite/Fanta)",
+            type = "combo"
+        ),
+        com.example.data.model.Product(
+            id = 3,
+            name = "Combo Family Party (2 Bắp + 3 Nước + 1 Snack)",
+            price = 145000,
+            imageUrl = "https://images.unsplash.com/photo-1585647347483-22b66260dfff?w=500",
+            description = "2 Hộp bắp lớn (Caramel & Phô mai) + 3 Ly nước ngọt + 1 Khoai tây chiên giòn",
+            type = "combo"
+        ),
+        com.example.data.model.Product(
+            id = 4,
+            name = "Bắp Rang Bơ Caramel Size L",
+            price = 45000,
+            imageUrl = "https://images.unsplash.com/photo-1585647347483-22b66260dfff?w=500",
+            description = "Bắp rang bơ phủ sốt caramel thơm ngọt, giòn rụm từng hạt",
+            type = "snack"
+        ),
+        com.example.data.model.Product(
+            id = 5,
+            name = "Nước Ngọt Coca-Cola Size L (32oz)",
+            price = 32000,
+            imageUrl = "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=500",
+            description = "Nước giải khát có gas Coca-Cola mát lạnh sảng khoái",
+            type = "drink"
+        ),
+        com.example.data.model.Product(
+            id = 6,
+            name = "Nước Suối Tinh Khiết Dasani 500ml",
+            price = 20000,
+            imageUrl = "https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=500",
+            description = "Nước khoáng đóng chai thanh khiết",
+            type = "drink"
+        )
+    )
 
     // Số lượng sản phẩm / combo đã chọn (productId -> quantity)
-    private val _products = MutableStateFlow<List<com.example.data.model.Product>>(emptyList())
+    private val _products = MutableStateFlow<List<com.example.data.model.Product>>(defaultProducts)
     val products: StateFlow<List<com.example.data.model.Product>> = _products.asStateFlow()
 
     private val _selectedProductsMap = MutableStateFlow<Map<Int, Int>>(emptyMap())
@@ -372,6 +421,8 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         com.example.data.supabase.SupabaseSyncService.fetchProductsFromSupabase { list ->
             if (list.isNotEmpty()) {
                 _products.value = list
+            } else {
+                _products.value = defaultProducts
             }
         }
     }
@@ -380,6 +431,17 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         com.example.data.supabase.SupabaseSyncService.fetchShowtimesFromSupabase { list ->
             if (list.isNotEmpty()) {
                 _showtimes.value = list
+                val movie = _selectedMovie.value
+                val date = _selectedDate.value
+                if (movie != null) {
+                    val movieTimes = list.filter {
+                        (it.movieId == movie.id || (movie.stringId.isNotEmpty() && it.movieStringId == movie.stringId)) &&
+                        (date.isBlank() || it.date.isBlank() || it.date == date)
+                    }.map { it.startTime }.filter { it.isNotBlank() }
+                    if (movieTimes.isNotEmpty() && (_selectedTime.value.isBlank() || !movieTimes.contains(_selectedTime.value))) {
+                        _selectedTime.value = movieTimes.first()
+                    }
+                }
             } else {
                 _showtimes.value = repository.defaultShowtimes
             }
@@ -634,12 +696,17 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             if (_selectedDate.value.isBlank()) {
                 _selectedDate.value = sdf.format(Calendar.getInstance().time)
             }
+            loadShowtimesAndBookingsFromSupabase()
             val movieTimes = _showtimes.value.filter {
                 (it.movieId == movie.id || (movie.stringId.isNotEmpty() && it.movieStringId == movie.stringId)) &&
                 (_selectedDate.value.isBlank() || it.date.isBlank() || it.date == _selectedDate.value)
             }.map { it.startTime }.filter { it.isNotBlank() }
             if (movieTimes.isNotEmpty()) {
                 _selectedTime.value = movieTimes.first()
+            }
+            // Tự động đồng bộ các đánh giá từ Supabase và Room khi mở xem một bộ phim
+            viewModelScope.launch {
+                repository.getReviewsForMovie(movie.id)
             }
         }
     }
@@ -650,6 +717,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         _isBookingFlowActive.value = true
+        loadShowtimesAndBookingsFromSupabase()
         // Đồng bộ vé mới nhất từ Supabase khi mở luồng đặt vé
         viewModelScope.launch {
             try {
