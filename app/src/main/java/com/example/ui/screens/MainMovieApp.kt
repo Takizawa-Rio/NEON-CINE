@@ -955,8 +955,8 @@ fun MovieCardItem(
     viewModel: MovieViewModel? = null,
     onSelect: () -> Unit
 ) {
-    val basePrice = viewModel?.getMovieBasePrice(movie) ?: 95000
-    val displayPrice = viewModel?.formatCurrency(basePrice) ?: "95.000 đ"
+    val basePrice = viewModel?.getMovieBasePrice(movie) ?: 0
+    val displayPrice = if (basePrice > 0) (viewModel?.formatCurrency(basePrice) ?: "${basePrice}đ") else "Theo suất chiếu"
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1773,9 +1773,13 @@ fun BookingFlowScreen(
     val cinema by viewModel.selectedCinema.collectAsStateWithLifecycle()
     val date by viewModel.selectedDate.collectAsStateWithLifecycle()
     val time by viewModel.selectedTime.collectAsStateWithLifecycle()
+    val availableDates by viewModel.availableDates.collectAsStateWithLifecycle()
     val availableTimeSlots by viewModel.availableTimeSlots.collectAsStateWithLifecycle()
     val selectedSeats by viewModel.selectedSeats.collectAsStateWithLifecycle()
     val bookedSeats by viewModel.bookedSeats.collectAsStateWithLifecycle()
+    val productsList by viewModel.products.collectAsStateWithLifecycle()
+    val selectedProductsMap by viewModel.selectedProductsMap.collectAsStateWithLifecycle()
+    val availableProducts = productsList
     val combos by viewModel.comboCount.collectAsStateWithLifecycle()
     val redeemedCombos by viewModel.redeemedComboCount.collectAsStateWithLifecycle()
     val userPoints by viewModel.userPoints.collectAsStateWithLifecycle()
@@ -1879,24 +1883,24 @@ fun BookingFlowScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Date selectors (Next 4 days)
-                Row(
+                // Date selectors (từ Supabase / ViewModel)
+                LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val sdf = SimpleDateFormat("dd/MM", Locale.getDefault())
-                    val dayFormat = SimpleDateFormat("EEE", Locale("vi", "VN"))
-                    val now = Calendar.getInstance()
+                    val dateList = if (availableDates.isNotEmpty()) availableDates else {
+                        val sdf = SimpleDateFormat("dd/MM", Locale.getDefault())
+                        val now = Calendar.getInstance()
+                        (0..3).map {
+                            val d = sdf.format(now.time)
+                            now.add(Calendar.DAY_OF_YEAR, 1)
+                            d
+                        }
+                    }
 
-                    repeat(4) { offset ->
-                        val tempCal = now.clone() as Calendar
-                        tempCal.add(Calendar.DAY_OF_YEAR, offset)
-                        val formattedDate = sdf.format(tempCal.time)
-                        val formattedDay = if (offset == 0) "Hôm nay" else dayFormat.format(tempCal.time)
-
+                    items(dateList) { formattedDate ->
                         val isSelected = date == formattedDate
                         Card(
                             modifier = Modifier
-                                .weight(1f)
                                 .clickable { viewModel.selectDate(formattedDate) }
                                 .testTag("date_$formattedDate"),
                             colors = CardDefaults.cardColors(
@@ -1906,12 +1910,11 @@ fun BookingFlowScreen(
                         ) {
                             Column(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
-                                    text = formattedDay,
+                                    text = "Ngày",
                                     fontSize = 11.sp,
                                     color = if (isSelected) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1928,30 +1931,37 @@ fun BookingFlowScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Showtime options grid
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val showtimes = availableTimeSlots
-                    for (item in showtimes) {
-                        val isSelected = time == item
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(6.dp))
-                                .border(1.dp, if (isSelected) MomoPrimary else Color.LightGray, RoundedCornerShape(6.dp))
-                                .background(if (isSelected) MomoPrimary else Color.Transparent)
-                                .clickable { viewModel.selectTime(item) }
-                                .padding(vertical = 8.dp)
-                                .testTag("time_$item"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = item,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
-                            )
+                // Showtime options grid (đồng bộ từ Supabase)
+                if (availableTimeSlots.isEmpty()) {
+                    Text(
+                        text = "Chưa có suất chiếu trên hệ thống Supabase",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                } else {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(availableTimeSlots) { item ->
+                            val isSelected = time == item
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .border(1.dp, if (isSelected) MomoPrimary else Color.LightGray, RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) MomoPrimary else Color.Transparent)
+                                    .clickable { viewModel.selectTime(item) }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                                    .testTag("time_$item"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = item,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 }
@@ -2300,94 +2310,112 @@ fun BookingFlowScreen(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Combo selector card
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
-                    shape = RoundedCornerShape(10.dp)
+                // Dynamic product & combo list from Supabase / ViewModel
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(50.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MomoPrimary.copy(alpha = 0.1f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Fastfood,
-                                contentDescription = "Combo",
-                                tint = MomoPrimary,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Combo Bắp + Nước Neon", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text(text = "1 bắp lớn vị ngọt + 1 nước ngọt 22oz mát lạnh", fontSize = 11.sp, color = Color.Gray)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(text = "75.000đ", fontWeight = FontWeight.ExtraBold, color = MomoPrimary, fontSize = 13.sp)
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        // Quantity counters
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(30.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                .border(
-                                    width = 1.2.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f),
-                                    shape = RoundedCornerShape(30.dp)
-                                )
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                        ) {
-                            IconButton(
-                                onClick = { viewModel.decrementCombo() },
-                                enabled = combos > 0,
+                    if (availableProducts.isEmpty()) {
+                        Text(
+                            text = "Đang tải bắp nước từ cơ sở dữ liệu...",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        availableProducts.forEach { product ->
+                            val qty = selectedProductsMap[product.id] ?: 0
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                            Row(
                                 modifier = Modifier
-                                    .size(32.dp)
-                                    .background(
-                                        color = if (combos > 0) MomoPrimary.copy(alpha = 0.1f) else Color.Transparent,
-                                        shape = CircleShape
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MomoPrimary.copy(alpha = 0.1f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (product.type == "product" || product.name.contains("Nước", ignoreCase = true)) Icons.Rounded.LocalDrink else Icons.Rounded.Fastfood,
+                                        contentDescription = product.name,
+                                        tint = MomoPrimary,
+                                        modifier = Modifier.size(28.dp)
                                     )
-                                    .testTag("decrement_combo")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Remove,
-                                    contentDescription = "Bớt",
-                                    tint = if (combos > 0) MomoPrimary else Color.Gray,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                            Text(
-                                text = "$combos",
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 16.sp,
-                                modifier = Modifier.padding(horizontal = 12.dp)
-                            )
-                            IconButton(
-                                onClick = { viewModel.incrementCombo() },
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .background(MomoPrimary, CircleShape)
-                                    .testTag("increment_combo")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "Thêm",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(text = product.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    if (product.description.isNotBlank()) {
+                                        Text(text = product.description, fontSize = 11.sp, color = Color.Gray, maxLines = 2)
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(text = viewModel.formatCurrency(product.price), fontWeight = FontWeight.ExtraBold, color = MomoPrimary, fontSize = 13.sp)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                // Quantity counters
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(30.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                        .border(
+                                            width = 1.2.dp,
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f),
+                                            shape = RoundedCornerShape(30.dp)
+                                        )
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                ) {
+                                    IconButton(
+                                        onClick = { viewModel.decrementProduct(product.id) },
+                                        enabled = qty > 0,
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .background(
+                                                color = if (qty > 0) MomoPrimary.copy(alpha = 0.1f) else Color.Transparent,
+                                                shape = CircleShape
+                                            )
+                                            .testTag("decrement_product_${product.id}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Remove,
+                                            contentDescription = "Bớt",
+                                            tint = if (qty > 0) MomoPrimary else Color.Gray,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "$qty",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 15.sp,
+                                        modifier = Modifier.padding(horizontal = 8.dp)
+                                    )
+                                    IconButton(
+                                        onClick = { viewModel.incrementProduct(product.id) },
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .background(MomoPrimary, CircleShape)
+                                            .testTag("increment_product_${product.id}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Thêm",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
+                }
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -2557,7 +2585,7 @@ fun BookingFlowScreen(
                         )
                         Text(
                             text = if (selectedSeats.isEmpty()) {
-                                val comboCost = combos * 75000
+                                val comboCost = viewModel.calculateProductsTotal()
                                 if (comboCost > 0) viewModel.formatCurrency((comboCost - discount).coerceAtLeast(0)) else "0đ"
                             } else {
                                 viewModel.formatCurrency(totalAmount)
@@ -2657,10 +2685,10 @@ fun BookingFlowScreen(
                                         Text("Giá vé (${selectedSeats.size}x)", fontSize = 12.sp)
                                         Text(viewModel.formatCurrency(viewModel.calculateSeatsTotal()), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
-                                    if (combos > 0) {
+                                    if (viewModel.calculateProductsTotal() > 0) {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text("Bắp nước combo (${combos}x)", fontSize = 12.sp)
-                                            Text(viewModel.formatCurrency(combos * 75000), fontSize = 12.sp)
+                                            Text("Bắp nước (${viewModel.getProductsSummary()})", fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                            Text(viewModel.formatCurrency(viewModel.calculateProductsTotal()), fontSize = 12.sp)
                                         }
                                     }
                                     if (discount > 0) {
@@ -2871,40 +2899,6 @@ fun BookingFlowScreen(
                                                 modifier = Modifier.weight(1f)
                                             )
                                         }
-
-                                        Spacer(modifier = Modifier.height(6.dp))
-
-                                        Button(
-                                            onClick = {
-                                                isProcessingPayment = true
-                                                val timer = Timer()
-                                                timer.schedule(object : TimerTask() {
-                                                    override fun run() {
-                                                        isProcessingPayment = false
-                                                        showSuccessAnimation = true
-                                                    }
-                                                }, 1500)
-                                            },
-                                            enabled = !isProcessingPayment && cardNumber.isNotBlank() && cardHolder.isNotBlank(),
-                                            colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(48.dp)
-                                                .testTag("confirm_visa_payment_button"),
-                                            shape = RoundedCornerShape(10.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Lock,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = "Xác Nhận Thanh Toán Thẻ Visa (${viewModel.formatCurrency(totalAmount)})",
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp
-                                            )
-                                        }
                                     }
                                 }
                             } else {
@@ -3043,6 +3037,7 @@ fun BookingFlowScreen(
                                             }
                                         }, 1500)
                                     },
+                                    enabled = if (paymentMethod == "card") cardNumber.isNotBlank() && cardHolder.isNotBlank() else true,
                                     colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary),
                                     modifier = Modifier
                                         .fillMaxWidth()

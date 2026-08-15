@@ -36,7 +36,7 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
             bannerUrl = "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=800&auto=format&fit=crop",
             director = "Lý Hải",
             cast = "Thanh Hiền, Trương Minh Cường, Đinh Y Nhung, Quách Ngọc Tuyên, Thanh Thức",
-            price = 95000
+            price = 0
         ),
         Movie(
             id = 2,
@@ -51,7 +51,7 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
             bannerUrl = "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=800&auto=format&fit=crop",
             director = "Trấn Thành",
             cast = "Phương Anh Đào, Tuấn Trần, Hồng Đào, Uyển Ân, Quốc Khánh",
-            price = 110000
+            price = 0
         ),
         Movie(
             id = 3,
@@ -66,7 +66,7 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
             bannerUrl = "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop",
             director = "Imai Kazuaki",
             cast = "Wasabi Mizuta, Megumi Ohara, Yumi Kakazu, Subaru Kimura",
-            price = 85000
+            price = 0
         ),
         Movie(
             id = 4,
@@ -81,7 +81,7 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
             bannerUrl = "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop",
             director = "Kelsey Mann",
             cast = "Amy Poehler, Maya Hawke, Kensington Tallman, Liza Lapira",
-            price = 100000
+            price = 0
         ),
         Movie(
             id = 5,
@@ -97,7 +97,7 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
             isNowShowing = false,
             director = "Shawn Levy",
             cast = "Ryan Reynolds, Hugh Jackman, Emma Corrin, Matthew Macfadyen",
-            price = 120000
+            price = 0
         ),
         Movie(
             id = 6,
@@ -113,9 +113,104 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
             isNowShowing = false,
             director = "Chris Renaud",
             cast = "Steve Carell, Kristen Wiig, Will Ferrell, Joey King",
-            price = 105000
+            price = 0
+        ),
+        Movie(
+            id = 7,
+            title = "Godzilla x Kong: Đế Chế Mới",
+            genre = "Hành động, Viễn tưởng, Phiêu lưu",
+            duration = 115,
+            rating = 4.8f,
+            ageRating = "T16",
+            releaseDate = "29/03/2024",
+            synopsis = "Một cuộc phiêu lưu hoàn toàn mới đưa hai siêu quái vật Godzilla và Kong cùng nhau đối đầu với một mối đe dọa sinh tử tiềm ẩn trong thế giới của chúng ta, thách thức sự tồn vong của nhân loại.",
+            posterUrl = "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop",
+            bannerUrl = "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop",
+            director = "Adam Wingard",
+            cast = "Rebecca Hall, Brian Tyree Henry, Dan Stevens, Kaylee Hottle",
+            price = 0
+        ),
+        Movie(
+            id = 8,
+            title = "Bộ Tứ Báo Thủ",
+            genre = "Hài hước, Gia đình, Hành động",
+            duration = 110,
+            rating = 4.7f,
+            ageRating = "P",
+            releaseDate = "29/01/2025",
+            synopsis = "Câu chuyện hài hước dở khóc dở cười về bộ bốn bạn trẻ bá đạo với những tình huống 'báo thủ' tràn ngập tiếng cười dành cho cả gia đình trong dịp Tết.",
+            posterUrl = "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop",
+            bannerUrl = "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=800&auto=format&fit=crop",
+            director = "Trấn Thành",
+            cast = "Lê Dương Bảo Lâm, Uyển Ân, Quốc Khánh, Lê Giang",
+            price = 0
+        ),
+        Movie(
+            id = 9,
+            title = "Cám",
+            genre = "Kinh dị, Cổ trang, Tâm lý",
+            duration = 122,
+            rating = 4.6f,
+            ageRating = "T18",
+            releaseDate = "20/09/2024",
+            synopsis = "Dựa trên dị bản kinh dị bí ẩn từ truyện cổ tích Tấm Cám. Bóc tách từng góc khuất u tăm và sự tàn khốc phía sau gia tộc làng Hương với những nghi thức tế lễ đẫm máu.",
+            posterUrl = "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=500&auto=format&fit=crop",
+            bannerUrl = "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop",
+            director = "Trần Hữu Tấn",
+            cast = "Rima Thanh Vy, Lâm Thanh Mỹ, Thúy Diễm, Quốc Cường",
+            price = 0
+        ),
+        Movie(
+            id = 10,
+            title = "Hành Tinh Khỉ: Vương Quốc Mới",
+            genre = "Viễn tưởng, Hành động, Phiêu lưu",
+            duration = 145,
+            rating = 4.8f,
+            ageRating = "T13",
+            releaseDate = "10/05/2024",
+            synopsis = "Nhiều thế hệ sau triều đại của Caesar, loài khỉ là loài thống trị sống hòa hợp trong khi con người bị đẩy vào thế giới bóng tối. Một thủ lĩnh khỉ mới xây dựng đế chế độc tài, buộc chú khỉ trẻ Noa phải dấn thân vào hành trình định hình lại tương lai.",
+            posterUrl = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&auto=format&fit=crop",
+            bannerUrl = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=800&auto=format&fit=crop",
+            director = "Wes Ball",
+            cast = "Owen Teague, Freya Allan, Kevin Durand, Peter Macon",
+            price = 0
+        ),
+        Movie(
+            id = 11,
+            title = "Mufasa: Vua Sư Tử",
+            genre = "Hoạt hình, Phiêu lưu, Gia đình",
+            duration = 118,
+            rating = 4.9f,
+            ageRating = "P",
+            releaseDate = "20/12/2026",
+            synopsis = "Câu chuyện huyền thoại về thời niên thiếu của Mufasa - từ một chú sư tử con mồ côi đi lạc đến khi trở thành Vua Sư Tử vĩ đại nhất của vùng đất Kiêu Hãnh.",
+            posterUrl = "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=500&auto=format&fit=crop",
+            bannerUrl = "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop",
+            isNowShowing = false,
+            director = "Barry Jenkins",
+            cast = "Aaron Pierre, Kelvin Harrison Jr., Seth Rogen, Billy Eichner",
+            price = 0
+        ),
+        Movie(
+            id = 12,
+            title = "Sonic the Hedgehog 3",
+            genre = "Hành động, Hài hước, Phiêu lưu",
+            duration = 106,
+            rating = 4.8f,
+            ageRating = "P",
+            releaseDate = "25/12/2026",
+            synopsis = "Nhím Sonic, Tails và Knuckles tái hợp để đối đầu với một đối thủ mới cực kỳ bí ẩn và hùng mạnh mang tên Shadow - kẻ sở hữu sức mạnh vượt xa mọi tưởng tượng.",
+            posterUrl = "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=500&auto=format&fit=crop",
+            bannerUrl = "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=800&auto=format&fit=crop",
+            isNowShowing = false,
+            director = "Jeff Fowler",
+            cast = "Ben Schwartz, Keanu Reeves, Jim Carrey, James Marsden",
+            price = 0
         )
     )
+
+    // Lịch chiếu mặc định riêng biệt theo từng phim (khởi tạo 0đ, chờ đồng bộ chính xác từ Database)
+    val defaultShowtimes = emptyList<com.example.data.model.Showtime>()
 
     // Đánh giá mặc định nếu DB trống
     private val defaultReviews = listOf(

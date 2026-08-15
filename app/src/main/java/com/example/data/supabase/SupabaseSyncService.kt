@@ -6,12 +6,14 @@ import com.example.data.model.Review
 import com.example.data.model.Ticket
 import com.example.data.model.UserProfile
 import com.example.data.model.PromoCode
-import com.squareup.moshi.Moshi
-import com.squareup.moshi.Types
-import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import com.example.data.model.Product
+import com.example.data.model.Showtime
+import com.example.data.model.Booking
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -22,17 +24,13 @@ import java.util.concurrent.TimeUnit
 object SupabaseSyncService {
     private const val TAG = "SupabaseSync"
 
-    // Điền thông tin Supabase của bạn ở đây để kết nối với cơ sở dữ liệu thật!
+    // Thông tin Supabase
     private const val SUPABASE_URL = "https://rdfnidhtqoyshjawnxqt.supabase.co"
     private const val SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkZm5pZGh0cW95c2hqYXdueHF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0MjUwNTcsImV4cCI6MjA5OTAwMTA1N30.nVMPKkGdcy_pSGseK2mdxBkg9skOzB69GMpyK-iSApw"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
-        .build()
-
-    private val moshi = Moshi.Builder()
-        .addLast(KotlinJsonAdapterFactory())
         .build()
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -42,11 +40,11 @@ object SupabaseSyncService {
      */
     fun fetchReviewsFromSupabase(movieId: Int, onResult: (List<Review>) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) {
-            Log.d(TAG, "Chưa cấu hình Supabase URL. Đang dùng dữ liệu Local cache.")
             return
         }
 
-        val url = "$SUPABASE_URL/rest/v1/reviews?movie_id=eq.$movieId&select=*"
+        // Supabase reviews table uses movieId column
+        val url = "$SUPABASE_URL/rest/v1/reviews?movieId=eq.$movieId&select=*"
         val request = Request.Builder()
             .url(url)
             .addHeader("apikey", SUPABASE_ANON_KEY)
@@ -61,22 +59,67 @@ object SupabaseSyncService {
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     if (!response.isSuccessful) {
-                        Log.e(TAG, "Supabase phản hồi lỗi: ${response.code}")
+                        // Thử fallback query không lọc hoặc lọc theo movie_id nếu cần
+                        fetchReviewsFallback(movieId, onResult)
                         return
                     }
                     val bodyString = response.body?.string() ?: return
-                    try {
-                        val type = Types.newParameterizedType(List::class.java, Review::class.java)
-                        val adapter = moshi.adapter<List<Review>>(type)
-                        val reviews = adapter.fromJson(bodyString) ?: emptyList()
-                        onResult(reviews)
-                        Log.d(TAG, "Fetch thành công ${reviews.size} reviews từ Supabase!")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Lỗi phân tích JSON Supabase: ${e.message}")
-                    }
+                    val reviews = parseReviewsJson(bodyString)
+                    onResult(reviews)
+                    Log.d(TAG, "Fetch thành công ${reviews.size} reviews từ Supabase!")
                 }
             }
         })
+    }
+
+    private fun fetchReviewsFallback(movieId: Int, onResult: (List<Review>) -> Unit) {
+        val url = "$SUPABASE_URL/rest/v1/reviews?select=*"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("apikey", SUPABASE_ANON_KEY)
+            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {}
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!response.isSuccessful) return
+                    val bodyString = response.body?.string() ?: return
+                    val allReviews = parseReviewsJson(bodyString)
+                    val filtered = if (movieId > 0) allReviews.filter { it.movieId == movieId } else allReviews
+                    onResult(filtered)
+                }
+            }
+        })
+    }
+
+    private fun parseReviewsJson(bodyString: String): List<Review> {
+        val list = mutableListOf<Review>()
+        try {
+            val jsonArray = JSONArray(bodyString)
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val mId = when {
+                    obj.has("movieId") -> obj.optInt("movieId", 0)
+                    obj.has("movie_id") -> obj.optInt("movie_id", 0)
+                    else -> 0
+                }
+                list.add(
+                    Review(
+                        id = obj.optInt("id", i + 1),
+                        movieId = mId,
+                        author = obj.optString("author", "Khán giả Neon"),
+                        rating = obj.optInt("rating", 5),
+                        content = obj.optString("content", ""),
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis())
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi parse reviews: ${e.message}")
+        }
+        return list
     }
 
     /**
@@ -84,14 +127,18 @@ object SupabaseSyncService {
      */
     fun pushReviewToSupabase(review: Review, onComplete: (Boolean) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) {
-            Log.d(TAG, "Supabase chưa cấu hình. Đã lưu review vào cơ sở dữ liệu Room Local.")
             onComplete(true)
             return
         }
 
         val url = "$SUPABASE_URL/rest/v1/reviews"
-        val adapter = moshi.adapter(Review::class.java)
-        val json = adapter.toJson(review)
+        val json = JSONObject().apply {
+            put("movieId", review.movieId)
+            put("author", review.author)
+            put("rating", review.rating)
+            put("content", review.content)
+            put("timestamp", review.timestamp)
+        }.toString()
 
         val request = Request.Builder()
             .url(url)
@@ -122,11 +169,10 @@ object SupabaseSyncService {
      */
     fun fetchTicketsFromSupabase(onResult: (List<Ticket>) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) {
-            Log.d(TAG, "Chưa cấu hình Supabase URL. Đang dùng dữ liệu Local cache.")
             return
         }
 
-        val url = "$SUPABASE_URL/rest/v1/tickets?select=*&order=timestamp.desc"
+        val url = "$SUPABASE_URL/rest/v1/tickets?select=*&order=created_at.desc"
         val request = Request.Builder()
             .url(url)
             .addHeader("apikey", SUPABASE_ANON_KEY)
@@ -141,22 +187,73 @@ object SupabaseSyncService {
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     if (!response.isSuccessful) {
-                        Log.e(TAG, "Supabase phản hồi lỗi: ${response.code}")
+                        fetchTicketsFallback(onResult)
                         return
                     }
                     val bodyString = response.body?.string() ?: return
-                    try {
-                        val type = Types.newParameterizedType(List::class.java, Ticket::class.java)
-                        val adapter = moshi.adapter<List<Ticket>>(type)
-                        val tickets = adapter.fromJson(bodyString) ?: emptyList()
-                        onResult(tickets)
-                        Log.d(TAG, "Fetch thành công ${tickets.size} tickets từ Supabase!")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Lỗi phân tích JSON Supabase tickets: ${e.message}")
-                    }
+                    val tickets = parseTicketsJson(bodyString)
+                    onResult(tickets)
+                    Log.d(TAG, "Fetch thành công ${tickets.size} tickets từ Supabase!")
                 }
             }
         })
+    }
+
+    private fun fetchTicketsFallback(onResult: (List<Ticket>) -> Unit) {
+        val url = "$SUPABASE_URL/rest/v1/tickets?select=*"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("apikey", SUPABASE_ANON_KEY)
+            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {}
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!response.isSuccessful) return
+                    val bodyString = response.body?.string() ?: return
+                    val tickets = parseTicketsJson(bodyString)
+                    onResult(tickets)
+                }
+            }
+        })
+    }
+
+    private fun parseTicketsJson(bodyString: String): List<Ticket> {
+        val list = mutableListOf<Ticket>()
+        try {
+            val jsonArray = JSONArray(bodyString)
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val mId = when {
+                    obj.has("movieId") -> obj.optInt("movieId", 0)
+                    obj.has("movie_id") -> obj.optInt("movie_id", 0)
+                    else -> 0
+                }
+                list.add(
+                    Ticket(
+                        id = obj.optInt("id", i + 1),
+                        movieId = mId,
+                        movieTitle = obj.optString("movie_title", obj.optString("movieTitle", "Phim")),
+                        moviePoster = obj.optString("movie_poster", obj.optString("moviePoster", "")),
+                        cinema = obj.optString("cinema", "Neon Cine Space"),
+                        dateTime = obj.optString("date_time", obj.optString("dateTime", "")),
+                        seats = obj.optString("seats", obj.optString("seat_code", "")),
+                        totalPrice = obj.optInt("total_price", obj.optInt("price", 0)),
+                        combo = obj.optString("combo", ""),
+                        barcode = obj.optString("barcode", "NEON-${System.currentTimeMillis() % 100000}"),
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                        userEmail = obj.optString("user_email", obj.optString("userEmail", "")),
+                        userName = obj.optString("user_name", obj.optString("userName", "")),
+                        promoCode = obj.optString("promo_code", obj.optString("promoCode", ""))
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi parse tickets: ${e.message}")
+        }
+        return list
     }
 
     /**
@@ -164,14 +261,16 @@ object SupabaseSyncService {
      */
     fun pushTicketToSupabase(ticket: Ticket, onComplete: (Boolean) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) {
-            Log.d(TAG, "Supabase chưa cấu hình. Đã lưu vé vào Room Local và hiển thị lịch sử.")
             onComplete(true)
             return
         }
 
         val url = "$SUPABASE_URL/rest/v1/tickets"
-        val adapter = moshi.adapter(Ticket::class.java)
-        val json = adapter.toJson(ticket)
+        val json = JSONObject().apply {
+            put("price", ticket.totalPrice)
+            put("seat_code", ticket.seats)
+            put("status", "paid")
+        }.toString()
 
         val request = Request.Builder()
             .url(url)
@@ -201,14 +300,17 @@ object SupabaseSyncService {
      * Đẩy Profile người dùng lên Supabase table 'profiles'
      */
     fun pushProfileToSupabase(profile: UserProfile, onComplete: (Boolean) -> Unit) {
-        if (SUPABASE_URL.contains("your-project-id")) {
+        if (SUPABASE_URL.contains("your-project-id") || profile.email.isBlank()) {
             onComplete(true)
             return
         }
 
         val url = "$SUPABASE_URL/rest/v1/profiles"
-        val adapter = moshi.adapter(UserProfile::class.java)
-        val json = adapter.toJson(profile)
+        val json = JSONObject().apply {
+            put("email", profile.email)
+            put("name", profile.name)
+            put("points", profile.points)
+        }.toString()
 
         val request = Request.Builder()
             .url(url)
@@ -238,7 +340,7 @@ object SupabaseSyncService {
      * Đồng bộ và tìm kiếm Profile người dùng từ Supabase table 'profiles' theo email
      */
     fun fetchProfileFromSupabase(email: String, onResult: (UserProfile?) -> Unit) {
-        if (SUPABASE_URL.contains("your-project-id")) {
+        if (SUPABASE_URL.contains("your-project-id") || email.isBlank()) {
             onResult(null)
             return
         }
@@ -265,16 +367,22 @@ object SupabaseSyncService {
                     }
                     val bodyString = response.body?.string() ?: ""
                     try {
-                        val type = Types.newParameterizedType(List::class.java, UserProfile::class.java)
-                        val adapter = moshi.adapter<List<UserProfile>>(type)
-                        val profiles = adapter.fromJson(bodyString)
-                        if (!profiles.isNullOrEmpty()) {
-                            onResult(profiles[0])
+                        val jsonArray = JSONArray(bodyString)
+                        if (jsonArray.length() > 0) {
+                            val obj = jsonArray.getJSONObject(0)
+                            onResult(
+                                UserProfile(
+                                    email = obj.optString("email", email),
+                                    name = obj.optString("name", "Thành viên Neon"),
+                                    points = obj.optInt("points", 150),
+                                    balance = 500000
+                                )
+                            )
                         } else {
                             onResult(null)
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "Lỗi phân tích JSON Supabase profile: ${e.message}")
+                        Log.e(TAG, "Lỗi phân tích JSON profile: ${e.message}")
                         onResult(null)
                     }
                 }
@@ -312,53 +420,156 @@ object SupabaseSyncService {
                         return
                     }
                     val bodyString = response.body?.string() ?: ""
-                    try {
-                        val type = Types.newParameterizedType(List::class.java, Movie::class.java)
-                        val adapter = moshi.adapter<List<Movie>>(type)
-                        val moviesList = adapter.fromJson(bodyString)
-                        onResult(moviesList)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Lỗi phân tích Moshi JSON Supabase movies: ${e.message}. Thử fallback JSON...")
-                        try {
-                            val jsonArray = org.json.JSONArray(bodyString)
-                            val list = mutableListOf<Movie>()
-                            for (i in 0 until jsonArray.length()) {
-                                val obj = jsonArray.getJSONObject(i)
-                                val idVal = obj.opt("id")
-                                val intId = when (idVal) {
-                                    is Int -> idVal
-                                    is Number -> idVal.toInt()
-                                    is String -> idVal.toIntOrNull() ?: kotlin.math.abs(idVal.hashCode())
-                                    else -> i + 1
-                                }
-                                list.add(
-                                    Movie(
-                                        id = intId,
-                                        title = obj.optString("title", "Phim Mới"),
-                                        genre = obj.optString("genre", "Phim"),
-                                        duration = obj.optInt("duration", 120),
-                                        rating = obj.optDouble("rating", 4.5).toFloat(),
-                                        ageRating = if (obj.has("age_rating")) obj.optString("age_rating") else obj.optString("ageRating", "T18"),
-                                        releaseDate = if (obj.has("release_date")) obj.optString("release_date") else obj.optString("releaseDate", "2026"),
-                                        synopsis = obj.optString("synopsis", ""),
-                                        posterUrl = if (obj.has("poster_url")) obj.optString("poster_url") else obj.optString("posterUrl", ""),
-                                        bannerUrl = if (obj.has("banner_url")) obj.optString("banner_url") else obj.optString("bannerUrl", ""),
-                                        isNowShowing = if (obj.has("is_now_showing")) obj.optBoolean("is_now_showing") else obj.optBoolean("isNowShowing", true),
-                                        director = obj.optString("director", "Đang cập nhật"),
-                                        cast = obj.optString("cast", "Đang cập nhật"),
-                                        price = obj.optInt("price", 95000)
-                                    )
-                                )
-                            }
-                            onResult(list)
-                        } catch (ex: Exception) {
-                            Log.e(TAG, "Lỗi fallback JSON Supabase movies: ${ex.message}")
-                            onResult(null)
-                        }
+                    val movies = parseMoviesJson(bodyString)
+                    onResult(movies)
+                }
+            }
+        })
+    }
+
+    private fun parseMoviesJson(bodyString: String): List<Movie> {
+        val list = mutableListOf<Movie>()
+        try {
+            val jsonArray = JSONArray(bodyString)
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val idVal = obj.opt("id")
+                val stringId = idVal?.toString() ?: ""
+                val intId = when (idVal) {
+                    is Int -> idVal
+                    is Number -> idVal.toInt()
+                    is String -> idVal.toIntOrNull() ?: kotlin.math.abs(idVal.hashCode())
+                    else -> i + 1
+                }
+                val rawRating = if (!obj.isNull("rating")) obj.optDouble("rating", 4.8).toFloat() else 4.8f
+                list.add(
+                    Movie(
+                        id = intId,
+                        title = obj.optString("title", "Phim Mới"),
+                        genre = obj.optString("genre", "Phim Chiếu Rạp"),
+                        duration = obj.optInt("duration", 120),
+                        rating = rawRating,
+                        ageRating = if (obj.has("age_rating")) obj.optString("age_rating") else obj.optString("ageRating", "T18"),
+                        releaseDate = if (obj.has("release_date")) obj.optString("release_date") else obj.optString("releaseDate", "2026"),
+                        synopsis = obj.optString("synopsis", ""),
+                        posterUrl = if (obj.has("poster_url")) obj.optString("poster_url") else obj.optString("posterUrl", ""),
+                        bannerUrl = if (obj.has("banner_url")) obj.optString("banner_url") else obj.optString("bannerUrl", ""),
+                        isNowShowing = if (obj.has("is_now_showing")) obj.optBoolean("is_now_showing") else obj.optBoolean("isNowShowing", true),
+                        director = obj.optString("director", "Đang cập nhật"),
+                        cast = obj.optString("cast", "Đang cập nhật"),
+                        price = obj.optInt("price", 0),
+                        stringId = stringId
+                    )
+                )
+            }
+            Log.d(TAG, "Đã tải thành công ${list.size} phim từ Supabase!")
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi phân tích JSON movies: ${e.message}")
+        }
+        return list
+    }
+
+    /**
+     * Đồng bộ danh sách sản phẩm / combo bắp nước từ Supabase table 'products' hoặc 'combos'
+     */
+    fun fetchProductsFromSupabase(onResult: (List<Product>) -> Unit) {
+        if (SUPABASE_URL.contains("your-project-id")) return
+
+        val url = "$SUPABASE_URL/rest/v1/products?select=*"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("apikey", SUPABASE_ANON_KEY)
+            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                fetchCombosFromSupabase(onResult)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!response.isSuccessful) {
+                        fetchCombosFromSupabase(onResult)
+                        return
+                    }
+                    val bodyString = response.body?.string() ?: ""
+                    val list = parseProductsJson(bodyString)
+                    if (list.isNotEmpty()) {
+                        onResult(list)
+                        Log.d(TAG, "Fetch thành công ${list.size} products từ Supabase!")
+                    } else {
+                        fetchCombosFromSupabase(onResult)
                     }
                 }
             }
         })
+    }
+
+    fun fetchCombosFromSupabase(onResult: (List<Product>) -> Unit) {
+        if (SUPABASE_URL.contains("your-project-id")) return
+
+        val url = "$SUPABASE_URL/rest/v1/combos?select=*"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("apikey", SUPABASE_ANON_KEY)
+            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e(TAG, "Lỗi fetch combos từ Supabase: ${e.message}")
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!response.isSuccessful) return
+                    val bodyString = response.body?.string() ?: ""
+                    val list = parseProductsJson(bodyString)
+                    if (list.isNotEmpty()) {
+                        onResult(list)
+                        Log.d(TAG, "Fetch thành công ${list.size} combos từ Supabase!")
+                    }
+                }
+            }
+        })
+    }
+
+    private fun parseProductsJson(bodyString: String): List<Product> {
+        val list = mutableListOf<Product>()
+        try {
+            val jsonArray = JSONArray(bodyString)
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val id = obj.optInt("id", i + 1)
+                val name = when {
+                    obj.has("name") -> obj.optString("name")
+                    obj.has("title") -> obj.optString("title")
+                    obj.has("combo_name") -> obj.optString("combo_name")
+                    else -> "Combo Bắp + Nước"
+                }
+                val price = when {
+                    obj.has("price") -> obj.optInt("price", 0)
+                    obj.has("combo_price") -> obj.optInt("combo_price", 0)
+                    else -> 0
+                }
+                val imageUrl = when {
+                    obj.has("image_url") -> obj.optString("image_url")
+                    obj.has("image") -> obj.optString("image")
+                    else -> ""
+                }
+                val desc = when {
+                    obj.has("description") -> obj.optString("description")
+                    obj.has("desc") -> obj.optString("desc")
+                    else -> ""
+                }
+                val type = obj.optString("type", "combo")
+                list.add(Product(id, name, price, imageUrl, desc, type))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi parse JSON products/combos: ${e.message}")
+        }
+        return list
     }
 
     /**
@@ -366,7 +577,6 @@ object SupabaseSyncService {
      */
     fun fetchPromoCodesFromSupabase(onResult: (List<PromoCode>) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) {
-            Log.d(TAG, "Chưa cấu hình Supabase URL. Đang dùng dữ liệu Local cache.")
             return
         }
 
@@ -385,36 +595,66 @@ object SupabaseSyncService {
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     if (!response.isSuccessful) {
-                        Log.e(TAG, "Supabase phản hồi lỗi: ${response.code}")
+                        Log.e(TAG, "Supabase promo_codes phản hồi lỗi: ${response.code}")
                         return
                     }
                     val bodyString = response.body?.string() ?: return
-                    try {
-                        val type = Types.newParameterizedType(List::class.java, PromoCode::class.java)
-                        val adapter = moshi.adapter<List<PromoCode>>(type)
-                        val promoCodes = adapter.fromJson(bodyString) ?: emptyList()
-                        onResult(promoCodes)
-                        Log.d(TAG, "Fetch thành công ${promoCodes.size} promo_codes từ Supabase!")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Lỗi phân tích JSON Supabase promo_codes: ${e.message}")
-                    }
+                    val promoCodes = parsePromoCodesJson(bodyString)
+                    onResult(promoCodes)
+                    Log.d(TAG, "Fetch thành công ${promoCodes.size} promo_codes từ Supabase!")
                 }
             }
         })
+    }
+
+    private fun parsePromoCodesJson(bodyString: String): List<PromoCode> {
+        val list = mutableListOf<PromoCode>()
+        try {
+            val jsonArray = JSONArray(bodyString)
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val code = obj.optString("code", "")
+                val discountAmount = when {
+                    obj.has("discount_amount") -> obj.optInt("discount_amount", 0)
+                    obj.has("discountAmount") -> obj.optInt("discountAmount", 0)
+                    obj.has("discount") -> obj.optInt("discount", 0)
+                    else -> 0
+                }
+                val desc = obj.optString("description", "")
+                val isUsed = if (obj.has("is_used")) obj.optBoolean("is_used") else obj.optBoolean("isUsed", false)
+                if (code.isNotBlank()) {
+                    list.add(
+                        PromoCode(
+                            code = code,
+                            discountAmount = discountAmount,
+                            description = desc,
+                            isUsed = isUsed
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi parse promo_codes: ${e.message}")
+        }
+        return list
     }
 
     /**
      * Đẩy mã giảm giá lên Supabase table 'promo_codes'
      */
     fun pushPromoCodeToSupabase(promoCode: PromoCode, onComplete: (Boolean) -> Unit) {
-        if (SUPABASE_URL.contains("your-project-id")) {
+        if (SUPABASE_URL.contains("your-project-id") || promoCode.code.isBlank()) {
             onComplete(true)
             return
         }
 
         val url = "$SUPABASE_URL/rest/v1/promo_codes"
-        val adapter = moshi.adapter(PromoCode::class.java)
-        val json = adapter.toJson(promoCode)
+        val json = JSONObject().apply {
+            put("code", promoCode.code)
+            put("discount_amount", promoCode.discountAmount)
+            put("description", promoCode.description)
+            put("is_used", promoCode.isUsed)
+        }.toString()
 
         val request = Request.Builder()
             .url(url)
@@ -444,13 +684,15 @@ object SupabaseSyncService {
      * Cập nhật trạng thái sử dụng của mã giảm giá trên Supabase table 'promo_codes'
      */
     fun updatePromoCodeUsageInSupabase(code: String, isUsed: Boolean, onComplete: (Boolean) -> Unit) {
-        if (SUPABASE_URL.contains("your-project-id")) {
+        if (SUPABASE_URL.contains("your-project-id") || code.isBlank()) {
             onComplete(true)
             return
         }
 
         val url = "$SUPABASE_URL/rest/v1/promo_codes?code=eq.$code"
-        val payload = "{\"is_used\": $isUsed}"
+        val payload = JSONObject().apply {
+            put("is_used", isUsed)
+        }.toString()
 
         val request = Request.Builder()
             .url(url)
@@ -478,7 +720,7 @@ object SupabaseSyncService {
     /**
      * Đồng bộ danh sách lịch chiếu (showtimes) từ Supabase table 'showtimes'
      */
-    fun fetchShowtimesFromSupabase(onResult: (List<com.example.data.model.Showtime>) -> Unit) {
+    fun fetchShowtimesFromSupabase(onResult: (List<Showtime>) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) {
             onResult(emptyList())
             return
@@ -505,14 +747,78 @@ object SupabaseSyncService {
                         return
                     }
                     val bodyString = response.body?.string() ?: ""
+                    val list = mutableListOf<Showtime>()
                     try {
-                        val type = Types.newParameterizedType(List::class.java, com.example.data.model.Showtime::class.java)
-                        val adapter = moshi.adapter<List<com.example.data.model.Showtime>>(type)
-                        val showtimes = adapter.fromJson(bodyString) ?: emptyList()
-                        onResult(showtimes)
-                        Log.d(TAG, "Fetch thành công ${showtimes.size} showtimes từ Supabase!")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Lỗi phân tích JSON Supabase showtimes: ${e.message}")
+                        val jsonArray = JSONArray(bodyString)
+                        for (i in 0 until jsonArray.length()) {
+                            val obj = jsonArray.getJSONObject(i)
+                            val mIdStr = if (obj.has("movie_id")) obj.optString("movie_id") else obj.optString("movieId", "")
+                            val mIdObj = if (obj.has("movie_id")) obj.get("movie_id") else obj.opt("movieId")
+                            val mId = when (mIdObj) {
+                                is Int -> mIdObj
+                                is Number -> mIdObj.toInt()
+                                is String -> mIdObj.toIntOrNull() ?: kotlin.math.abs(mIdObj.hashCode())
+                                else -> 0
+                            }
+                            var sTime = when {
+                                obj.has("start_time") -> obj.optString("start_time")
+                                obj.has("startTime") -> obj.optString("startTime")
+                                else -> ""
+                            }
+                            if (sTime.length >= 5 && sTime.contains(":")) {
+                                sTime = sTime.substring(0, 5) // Lấy HH:mm bỏ phần :ss nếu có
+                            }
+
+                            var eTime = when {
+                                obj.has("end_time") -> obj.optString("end_time")
+                                obj.has("endTime") -> obj.optString("endTime")
+                                else -> ""
+                            }
+                            if (eTime.length >= 5 && eTime.contains(":")) {
+                                eTime = eTime.substring(0, 5)
+                            }
+
+                            var sDate = when {
+                                obj.has("show_date") -> obj.optString("show_date")
+                                obj.has("showDate") -> obj.optString("showDate")
+                                obj.has("date") -> obj.optString("date")
+                                else -> ""
+                            }
+                            // Nếu show_date là YYYY-MM-DD chuyển thành dd/MM để khớp với UI
+                            if (sDate.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$"))) {
+                                val parts = sDate.split("-")
+                                sDate = "${parts[2]}/${parts[1]}"
+                            }
+                            val rId = when {
+                                obj.has("room_id") -> obj.optString("room_id")
+                                obj.has("roomId") -> obj.optString("roomId")
+                                else -> ""
+                            }
+                            val regPrice = if (obj.has("regular_price") && !obj.isNull("regular_price")) obj.optDouble("regular_price") else null
+                            val vPrice = if (obj.has("vip_price") && !obj.isNull("vip_price")) obj.optDouble("vip_price") else null
+                            val vPercent = if (obj.has("vip_percent") && !obj.isNull("vip_percent")) obj.optDouble("vip_percent") else null
+                            val pr = if (obj.has("price") && !obj.isNull("price")) obj.optInt("price") else (regPrice?.toInt() ?: 0)
+
+                            list.add(
+                                Showtime(
+                                    id = obj.optInt("id", i + 1),
+                                    movieId = mId,
+                                    movieStringId = mIdStr,
+                                    startTime = sTime,
+                                    endTime = eTime,
+                                    price = pr,
+                                    regularPrice = regPrice,
+                                    vipPrice = vPrice,
+                                    vipPercent = vPercent,
+                                    date = sDate,
+                                    roomId = rId
+                                )
+                            )
+                        }
+                        onResult(list)
+                        Log.d(TAG, "Fetch thành công ${list.size} showtimes từ Supabase!")
+                    } catch (ex: Exception) {
+                        Log.e(TAG, "Lỗi parse showtimes: ${ex.message}")
                         onResult(emptyList())
                     }
                 }
@@ -523,7 +829,7 @@ object SupabaseSyncService {
     /**
      * Đồng bộ danh sách đặt chỗ (bookings) từ Supabase table 'bookings'
      */
-    fun fetchBookingsFromSupabase(onResult: (List<com.example.data.model.Booking>) -> Unit) {
+    fun fetchBookingsFromSupabase(onResult: (List<Booking>) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) {
             onResult(emptyList())
             return
@@ -550,54 +856,45 @@ object SupabaseSyncService {
                         return
                     }
                     val bodyString = response.body?.string() ?: ""
+                    val list = mutableListOf<Booking>()
                     try {
-                        val type = Types.newParameterizedType(List::class.java, com.example.data.model.Booking::class.java)
-                        val adapter = moshi.adapter<List<com.example.data.model.Booking>>(type)
-                        val bookings = adapter.fromJson(bodyString) ?: emptyList()
-                        onResult(bookings)
-                        Log.d(TAG, "Fetch thành công ${bookings.size} bookings từ Supabase!")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Lỗi Moshi JSON Supabase bookings: ${e.message}. Thử fallback JSON...")
-                        try {
-                            val jsonArray = org.json.JSONArray(bodyString)
-                            val list = mutableListOf<com.example.data.model.Booking>()
-                            for (i in 0 until jsonArray.length()) {
-                                val obj = jsonArray.getJSONObject(i)
-                                val seatsVal = obj.optString("seats", "")
-                                val idVal = obj.opt("id")
-                                val intId = when (idVal) {
-                                    is Int -> idVal
-                                    is Number -> idVal.toInt()
-                                    is String -> idVal.toIntOrNull() ?: kotlin.math.abs(idVal.hashCode())
-                                    else -> i + 1
-                                }
-                                val mIdVal = obj.opt("movie_id")
-                                val intMId = when (mIdVal) {
-                                    is Int -> mIdVal
-                                    is Number -> mIdVal.toInt()
-                                    is String -> mIdVal.toIntOrNull() ?: kotlin.math.abs(mIdVal.hashCode())
-                                    else -> 0
-                                }
-                                list.add(
-                                    com.example.data.model.Booking(
-                                        id = intId,
-                                        movieId = intMId,
-                                        showtimeId = obj.optInt("showtime_id", 0),
-                                        seats = seatsVal,
-                                        totalPrice = obj.optInt("total_price", 0),
-                                        userEmail = obj.optString("user_email", "")
-                                    )
-                                )
+                        val jsonArray = JSONArray(bodyString)
+                        for (i in 0 until jsonArray.length()) {
+                            val obj = jsonArray.getJSONObject(i)
+                            val seatsVal = obj.optString("seats", "")
+                            val idVal = obj.opt("id")
+                            val intId = when (idVal) {
+                                is Int -> idVal
+                                is Number -> idVal.toInt()
+                                is String -> idVal.toIntOrNull() ?: kotlin.math.abs(idVal.hashCode())
+                                else -> i + 1
                             }
-                            onResult(list)
-                        } catch (ex: Exception) {
-                            Log.e(TAG, "Lỗi fallback JSON Supabase bookings: ${ex.message}")
-                            onResult(emptyList())
+                            val mIdVal = obj.opt("movie_id")
+                            val intMId = when (mIdVal) {
+                                is Int -> mIdVal
+                                is Number -> mIdVal.toInt()
+                                is String -> mIdVal.toIntOrNull() ?: kotlin.math.abs(mIdVal.hashCode())
+                                else -> 0
+                            }
+                            list.add(
+                                Booking(
+                                    id = intId,
+                                    movieId = intMId,
+                                    showtimeId = obj.optInt("showtime_id", 0),
+                                    seats = seatsVal,
+                                    totalPrice = obj.optInt("total_price", 0),
+                                    userEmail = obj.optString("user_email", "")
+                                )
+                            )
                         }
+                        onResult(list)
+                        Log.d(TAG, "Fetch thành công ${list.size} bookings từ Supabase!")
+                    } catch (ex: Exception) {
+                        Log.e(TAG, "Lỗi parse bookings: ${ex.message}")
+                        onResult(emptyList())
                     }
                 }
             }
         })
     }
 }
-

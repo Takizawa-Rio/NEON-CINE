@@ -409,13 +409,12 @@ fun ShowtimeMovieCard(
     onShowtimeSelected: (String) -> Unit
 ) {
     val dbShowtimes = viewModel?.showtimes?.collectAsStateWithLifecycle()?.value
-    val showtimes = remember(movie.id, dbShowtimes) {
-        val listFromDb = dbShowtimes?.filter { it.movieId == movie.id }?.map { it.startTime }?.filter { it.isNotBlank() }
-        if (!listFromDb.isNullOrEmpty()) {
-            listFromDb.distinct()
-        } else {
-            listOf("09:30", "12:15", "15:00", "17:45", "19:30", "21:15", "23:00")
-        }
+    val showtimes = remember(movie.id, movie.stringId, selectedDate, dbShowtimes) {
+        val listFromDb = dbShowtimes?.filter { 
+            (it.movieId == movie.id || (movie.stringId.isNotEmpty() && it.movieStringId == movie.stringId)) &&
+            (selectedDate.isBlank() || it.date.isBlank() || it.date == selectedDate)
+        }?.map { it.startTime }?.filter { it.isNotBlank() }
+        listFromDb?.distinct() ?: emptyList()
     }
 
     Card(
@@ -481,35 +480,44 @@ fun ShowtimeMovieCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            Text(
-                text = "Chọn suất chiếu tối nay (2D Phụ đề Tiếng Việt):",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = NeonSecondary,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+            if (showtimes.isEmpty()) {
+                Text(
+                    text = "Chưa có suất chiếu trên hệ thống Supabase",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            } else {
+                Text(
+                    text = "Chọn suất chiếu (đồng bộ từ Supabase):",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = NeonSecondary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
 
-            // Khung lưới các suất chiếu ngang
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 4.dp)
-            ) {
-                items(showtimes) { time ->
-                    Button(
-                        onClick = { onShowtimeSelected(time) },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = NeonSecondary.copy(alpha = 0.12f),
-                            contentColor = NeonSecondary
-                        ),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                        border = BorderStroke(1.dp, NeonSecondary.copy(alpha = 0.25f))
-                    ) {
-                        Text(
-                            text = time,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 13.sp
-                        )
+                // Khung lưới các suất chiếu ngang
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 4.dp)
+                ) {
+                    items(showtimes) { time ->
+                        Button(
+                            onClick = { onShowtimeSelected(time) },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = NeonSecondary.copy(alpha = 0.12f),
+                                contentColor = NeonSecondary
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                            border = BorderStroke(1.dp, NeonSecondary.copy(alpha = 0.25f))
+                        ) {
+                            Text(
+                                text = time,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.sp
+                            )
+                        }
                     }
                 }
             }
