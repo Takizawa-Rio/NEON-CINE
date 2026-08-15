@@ -23,6 +23,15 @@ interface CinemaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTicket(ticket: Ticket)
 
+    @Query("DELETE FROM tickets WHERE id = :ticketId")
+    suspend fun deleteTicket(ticketId: Int)
+
+    @Query("DELETE FROM tickets WHERE id IN (:ticketIds)")
+    suspend fun deleteTickets(ticketIds: List<Int>)
+
+    @Query("DELETE FROM tickets")
+    suspend fun deleteAllTickets()
+
     @Query("SELECT COUNT(*) FROM reviews WHERE movieId = :movieId")
     suspend fun getReviewCount(movieId: Int): Int
 

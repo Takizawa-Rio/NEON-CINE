@@ -205,23 +205,131 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     private val _bookings = MutableStateFlow<List<com.example.data.model.Booking>>(emptyList())
     val bookings: StateFlow<List<com.example.data.model.Booking>> = _bookings.asStateFlow()
 
-    // Danh sách ngày chiếu động từ Supabase
-    val availableDates: StateFlow<List<String>> = combine(_selectedMovie, _showtimes) { movie, list ->
-        if (movie != null) {
-            val datesFromDb = list.filter {
-                (it.movieId == movie.id || (movie.stringId.isNotEmpty() && it.movieStringId == movie.stringId)) && it.date.isNotBlank()
-            }.map { it.date }.distinct()
-            if (datesFromDb.isNotEmpty()) {
-                return@combine datesFromDb
+    // Danh sách phòng chiếu & sơ đồ ghế từ Supabase
+    private val _screeningRooms = MutableStateFlow<List<com.example.data.model.ScreeningRoom>>(emptyList())
+    val screeningRooms: StateFlow<List<com.example.data.model.ScreeningRoom>> = _screeningRooms.asStateFlow()
+
+    // Phòng chiếu của suất chiếu đang được chọn
+    val currentScreeningRoom: StateFlow<com.example.data.model.ScreeningRoom?> = combine(
+        _selectedMovie,
+        _selectedDate,
+        _selectedTime,
+        _showtimes,
+        _screeningRooms
+    ) { movie, date, time, showtimes, rooms ->
+        if (movie == null) null
+        else {
+            val showtime = showtimes.find {
+                (it.movieId == movie.id || (movie.stringId.isNotEmpty() && it.movieStringId == movie.stringId)) &&
+                (date.isBlank() || it.date.isBlank() || it.date == date) &&
+                (time.isBlank() || it.startTime == time)
+            } ?: showtimes.find {
+                it.movieId == movie.id || (movie.stringId.isNotEmpty() && it.movieStringId == movie.stringId)
+            }
+            if (showtime != null && showtime.roomId.isNotBlank()) {
+                rooms.find { it.id.equals(showtime.roomId, ignoreCase = true) }
+            } else {
+                rooms.firstOrNull()
             }
         }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = null
+    )
+
+
+    private fun isDateTodayOrFuture(dateStr: String): Boolean {
+        if (dateStr.isBlank()) return true
+        try {
+            val today = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val currentYear = today.get(Calendar.YEAR)
+
+            if (dateStr.contains("-")) {
+                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                val d = sdf.parse(dateStr.substringBefore("T").trim())
+                if (d != null) {
+                    return !d.before(today.time)
+                }
+            } else if (dateStr.contains("/")) {
+                val parts = dateStr.split("/")
+                if (parts.size >= 2) {
+                    val dNum = parts[0].toIntOrNull() ?: return true
+                    val mNum = parts[1].toIntOrNull() ?: return true
+                    val checkCal = Calendar.getInstance().apply {
+                        set(Calendar.YEAR, currentYear)
+                        set(Calendar.MONTH, mNum - 1)
+                        set(Calendar.DAY_OF_MONTH, dNum)
+                        set(Calendar.HOUR_OF_DAY, 0)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    return !checkCal.before(today)
+                }
+            }
+        } catch (e: Exception) {
+            // Log or ignore
+        }
+        return true
+    }
+
+    private fun parseDateForSort(dateStr: String): Long {
+        try {
+            val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+            if (dateStr.contains("-")) {
+                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                return sdf.parse(dateStr.substringBefore("T").trim())?.time ?: Long.MAX_VALUE
+            } else if (dateStr.contains("/")) {
+                val parts = dateStr.split("/")
+                if (parts.size >= 2) {
+                    val dNum = parts[0].toIntOrNull() ?: 1
+                    val mNum = parts[1].toIntOrNull() ?: 1
+                    val checkCal = Calendar.getInstance().apply {
+                        set(Calendar.YEAR, currentYear)
+                        set(Calendar.MONTH, mNum - 1)
+                        set(Calendar.DAY_OF_MONTH, dNum)
+                        set(Calendar.HOUR_OF_DAY, 0)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    return checkCal.timeInMillis
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore
+        }
+        return Long.MAX_VALUE
+    }
+
+    // Danh sách ngày chiếu động từ Supabase (Chỉ lấy từ hôm nay trở đi, sắp xếp theo thứ tự thời gian)
+    val availableDates: StateFlow<List<String>> = combine(_selectedMovie, _showtimes) { movie, list ->
         val sdf = SimpleDateFormat("dd/MM", Locale.getDefault())
         val cal = Calendar.getInstance()
-        (0..3).map {
+        val defaultUpcomingDates = (0..4).map {
             val dateStr = sdf.format(cal.time)
             cal.add(Calendar.DAY_OF_YEAR, 1)
             dateStr
         }
+
+        if (movie != null) {
+            val datesFromDb = list.filter {
+                (it.movieId == movie.id || (movie.stringId.isNotEmpty() && it.movieStringId == movie.stringId)) &&
+                it.date.isNotBlank() &&
+                isDateTodayOrFuture(it.date)
+            }.map { it.date }.distinct().sortedBy { parseDateForSort(it) }
+
+            if (datesFromDb.isNotEmpty()) {
+                return@combine datesFromDb
+            }
+        }
+        defaultUpcomingDates
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -236,7 +344,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
                 (date.isBlank() || it.date.isBlank() || it.date == date)
             }.map { it.startTime }.filter { it.isNotBlank() }
             if (movieShowtimes.isNotEmpty()) {
-                return@combine movieShowtimes.distinct()
+                return@combine movieShowtimes.distinct().sorted()
             }
         }
         emptyList()
@@ -414,7 +522,16 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         // Đồng bộ phim, suất chiếu, chỗ ngồi & combo bắp nước từ Supabase
         loadProductsFromSupabase()
         loadMoviesFromSupabase()
+        loadScreeningRoomsFromSupabase()
         loadShowtimesAndBookingsFromSupabase()
+    }
+
+    fun loadScreeningRoomsFromSupabase() {
+        com.example.data.supabase.SupabaseSyncService.fetchScreeningRoomsFromSupabase { list ->
+            if (list.isNotEmpty()) {
+                _screeningRooms.value = list
+            }
+        }
     }
 
     fun loadProductsFromSupabase() {
@@ -474,9 +591,10 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshDataFromSupabase() {
-        // Đồng bộ danh sách phim, suất chiếu, sản phẩm & chỗ ngồi từ Supabase
+        // Đồng bộ danh sách phim, suất chiếu, sản phẩm, phòng chiếu & chỗ ngồi từ Supabase
         loadProductsFromSupabase()
         loadMoviesFromSupabase()
+        loadScreeningRoomsFromSupabase()
         loadShowtimesAndBookingsFromSupabase()
 
 
@@ -693,14 +811,24 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         _comboCount.value = 0 // Reset combo
         if (movie != null) {
             val sdf = SimpleDateFormat("dd/MM", Locale.getDefault())
-            if (_selectedDate.value.isBlank()) {
-                _selectedDate.value = sdf.format(Calendar.getInstance().time)
+            val todayStr = sdf.format(Calendar.getInstance().time)
+            val upcomingDates = _showtimes.value.filter {
+                (it.movieId == movie.id || (movie.stringId.isNotEmpty() && it.movieStringId == movie.stringId)) &&
+                it.date.isNotBlank() &&
+                isDateTodayOrFuture(it.date)
+            }.map { it.date }.distinct().sortedBy { parseDateForSort(it) }
+
+            if (_selectedDate.value.isBlank() || !isDateTodayOrFuture(_selectedDate.value)) {
+                _selectedDate.value = if (upcomingDates.isNotEmpty()) upcomingDates.first() else todayStr
+            } else if (upcomingDates.isNotEmpty() && !upcomingDates.contains(_selectedDate.value)) {
+                _selectedDate.value = upcomingDates.first()
             }
+
             loadShowtimesAndBookingsFromSupabase()
             val movieTimes = _showtimes.value.filter {
                 (it.movieId == movie.id || (movie.stringId.isNotEmpty() && it.movieStringId == movie.stringId)) &&
                 (_selectedDate.value.isBlank() || it.date.isBlank() || it.date == _selectedDate.value)
-            }.map { it.startTime }.filter { it.isNotBlank() }
+            }.map { it.startTime }.filter { it.isNotBlank() }.sorted()
             if (movieTimes.isNotEmpty()) {
                 _selectedTime.value = movieTimes.first()
             }
@@ -976,10 +1104,21 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         val vipPrice = showtime?.vipPrice?.toInt()?.takeIf { it > 0 }
             ?: showtime?.effectiveVipPrice?.takeIf { it > 0 }
             ?: (if (showtime?.vipPercent != null && regularPrice > 0) {
-                (regularPrice * (1.0 + showtime.vipPercent / 100.0)).toInt()
+                if (showtime.vipPercent > 5.0) (regularPrice * (1.0 + showtime.vipPercent / 100.0)).toInt()
+                else (regularPrice * showtime.vipPercent).toInt()
             } else {
                 regularPrice
             })
+
+        val room = currentScreeningRoom.value
+        val seatLayoutItem = room?.seatLayout?.find { it.code.equals(seat, ignoreCase = true) }
+        if (seatLayoutItem != null) {
+            return when (seatLayoutItem.type.uppercase(Locale.getDefault())) {
+                "VIP" -> if (vipPrice > 0) vipPrice else regularPrice
+                "COUPLE", "SWEETBOX" -> if (vipPrice > 0) (vipPrice * 2) else (regularPrice * 2)
+                else -> regularPrice
+            }
+        }
 
         val row = seat.take(1).uppercase(Locale.getDefault())
         return when (row) {
@@ -1109,6 +1248,30 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             _isBookingFlowActive.value = false
             _selectedMovie.value = null
             _currentTab.value = 3 // Chuyển sang tab "Vé của tôi" (tab số 3) để xem vé vừa đặt!
+        }
+    }
+
+    // Xóa một vé cụ thể
+    fun deleteTicket(ticket: Ticket) {
+        viewModelScope.launch {
+            repository.deleteTicket(ticket.id, ticket.barcode)
+            addNotification(
+                title = "🗑️ Đã xóa vé",
+                message = "Đã xóa vé xem phim '${ticket.movieTitle}' (Ghế: ${ticket.seats}) khỏi danh sách.",
+                type = "system"
+            )
+        }
+    }
+
+    // Xóa toàn bộ lịch sử vé
+    fun clearAllTickets() {
+        viewModelScope.launch {
+            repository.deleteAllTickets()
+            addNotification(
+                title = "🗑️ Đã dọn sạch lịch sử vé",
+                message = "Toàn bộ vé xem phim cũ đã được xóa thành công.",
+                type = "system"
+            )
         }
     }
 

@@ -1777,6 +1777,7 @@ fun BookingFlowScreen(
     val availableTimeSlots by viewModel.availableTimeSlots.collectAsStateWithLifecycle()
     val selectedSeats by viewModel.selectedSeats.collectAsStateWithLifecycle()
     val bookedSeats by viewModel.bookedSeats.collectAsStateWithLifecycle()
+    val currentScreeningRoom by viewModel.currentScreeningRoom.collectAsStateWithLifecycle()
     val productsList by viewModel.products.collectAsStateWithLifecycle()
     val selectedProductsMap by viewModel.selectedProductsMap.collectAsStateWithLifecycle()
     val availableProducts = productsList
@@ -1899,6 +1900,22 @@ fun BookingFlowScreen(
 
                     items(dateList) { formattedDate ->
                         val isSelected = date == formattedDate
+                        val dayLabel = remember(formattedDate) {
+                            try {
+                                val sdf = SimpleDateFormat("dd/MM", Locale.getDefault())
+                                val cal = Calendar.getInstance()
+                                val todayStr = sdf.format(cal.time)
+                                if (formattedDate == todayStr) "Hôm nay"
+                                else {
+                                    cal.add(Calendar.DAY_OF_YEAR, 1)
+                                    val tomorrowStr = sdf.format(cal.time)
+                                    if (formattedDate == tomorrowStr) "Ngày mai" else "Ngày"
+                                }
+                            } catch (e: Exception) {
+                                "Ngày"
+                            }
+                        }
+
                         Card(
                             modifier = Modifier
                                 .clickable { viewModel.selectDate(formattedDate) }
@@ -1914,9 +1931,10 @@ fun BookingFlowScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
-                                    text = "Ngày",
+                                    text = dayLabel,
                                     fontSize = 11.sp,
-                                    color = if (isSelected) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    fontWeight = if (dayLabel != "Ngày") FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (isSelected) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
                                     text = formattedDate,
@@ -1982,14 +2000,24 @@ fun BookingFlowScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Column {
+                        Text(
+                            text = "2. Chọn Ghế Ngồi",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MomoPrimary
+                        )
+                        val roomTitle = currentScreeningRoom?.name?.takeIf { it.isNotBlank() } ?: "Phòng Chiếu Tiêu Chuẩn"
+                        val seatCountStr = currentScreeningRoom?.totalSeats?.takeIf { it > 0 }?.let { " • $it ghế" } ?: ""
+                        Text(
+                            text = "🏛️ $roomTitle$seatCountStr",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Text(
-                        text = "2. Chọn Ghế Ngồi",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MomoPrimary
-                    )
-                    Text(
-                        text = "🚪 Lối vào phòng chiếu",
+                        text = "🚪 Lối vào rạp",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2040,7 +2068,7 @@ fun BookingFlowScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Interactive 8x8 seat grid container
+                // Dynamic Interactive Seat Grid Container (Đồng bộ theo từng Phòng Chiếu Supabase)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -2054,34 +2082,53 @@ fun BookingFlowScreen(
                             .fillMaxWidth()
                             .padding(vertical = 14.dp, horizontal = 4.dp)
                     ) {
-                        val rows = listOf("A", "B", "C", "D", "E", "F", "G", "H", "I", "J")
+                        val seatLayout = currentScreeningRoom?.seatLayout ?: emptyList()
+                        val hasAisle = currentScreeningRoom?.hasAisle ?: true
 
-                        for (row in rows) {
-                            Row(
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                // Row label Left
-                                Text(
-                                    text = row,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.width(18.dp)
-                                )
+                        if (seatLayout.isNotEmpty()) {
+                            // Render theo sơ đồ thực tế trong bảng screening_room (JSON seat_layout)
+                            val groupedByRow = seatLayout.groupBy { it.row }
+                            for ((rowName, seatList) in groupedByRow) {
+                                Row(
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    // Row label Left
+                                    Text(
+                                        text = rowName,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.width(18.dp)
+                                    )
 
-                                Spacer(modifier = Modifier.width(2.dp))
+                                    Spacer(modifier = Modifier.width(2.dp))
 
-                                // Ghế 1 -> 5 (Bên trái)
-                                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    for (col in 1..5) {
-                                        val seatId = "$row$col"
+                                    val midCol = (seatList.size + 1) / 2
+                                    for ((index, seatItem) in seatList.withIndex()) {
+                                        if (hasAisle && index == midCol && seatList.size > 3) {
+                                            // Lối đi trung tâm
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(12.dp)
+                                                    .height(24.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = "•",
+                                                    fontSize = 10.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
+                                                )
+                                            }
+                                        }
+
+                                        val seatId = seatItem.code.ifEmpty { "$rowName${seatItem.col}" }
                                         val isSelected = selectedSeats.contains(seatId)
                                         val isBooked = bookedSeats.contains(seatId)
-                                        val isVIP = row == "E" || row == "F" || row == "G" || row == "H" || row == "I"
-                                        val isCouple = row == "J"
+                                        val isVIP = seatItem.type.equals("VIP", ignoreCase = true)
+                                        val isCouple = seatItem.type.equals("COUPLE", ignoreCase = true) || seatItem.type.equals("SWEETBOX", ignoreCase = true)
 
                                         val seatBg = when {
                                             isBooked -> Color(0xFF333333)
@@ -2099,9 +2146,12 @@ fun BookingFlowScreen(
                                             else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                                         }
 
+                                        val seatSize = if (seatList.size > 8) 22.dp else 26.dp
+
                                         Box(
                                             modifier = Modifier
-                                                .size(width = 24.dp, height = 24.dp)
+                                                .padding(horizontal = 2.dp)
+                                                .size(width = seatSize, height = 24.dp)
                                                 .clip(RoundedCornerShape(5.dp))
                                                 .background(seatBg)
                                                 .border(seatBorder, RoundedCornerShape(5.dp))
@@ -2112,7 +2162,7 @@ fun BookingFlowScreen(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
-                                                text = if (isBooked) "✕" else "$col",
+                                                text = if (isBooked) "✕" else "${seatItem.col}",
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = when {
@@ -2124,30 +2174,67 @@ fun BookingFlowScreen(
                                             )
                                         }
                                     }
-                                }
 
-                                // LỐI ĐI TRUNG TÂM (Center Aisle)
-                                Box(
-                                    modifier = Modifier
-                                        .width(12.dp)
-                                        .height(24.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
+                                    Spacer(modifier = Modifier.width(2.dp))
+
+                                    // Row label Right
                                     Text(
-                                        text = "•",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
+                                        text = rowName,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.width(18.dp)
                                     )
                                 }
+                            }
+                        } else {
+                            // Tự động tính số hàng & số cột từ thông số phòng chiếu (hoặc chuẩn 10 hàng x 10 cột)
+                            val rowCount = currentScreeningRoom?.rowsCount?.takeIf { it > 0 } ?: 10
+                            val colCount = currentScreeningRoom?.colsCount?.takeIf { it > 0 } ?: 10
+                            val dynamicRows = (0 until rowCount).map { ('A' + it).toString() }
+                            val midCol = (colCount + 1) / 2
 
-                                // Ghế 6 -> 10 (Bên phải)
-                                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    for (col in 6..10) {
+                            for (row in dynamicRows) {
+                                Row(
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    // Row label Left
+                                    Text(
+                                        text = row,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.width(18.dp)
+                                    )
+
+                                    Spacer(modifier = Modifier.width(2.dp))
+
+                                    for (col in 1..colCount) {
+                                        if (hasAisle && col == midCol && colCount > 4) {
+                                            // Lối đi trung tâm
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(12.dp)
+                                                    .height(24.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = "•",
+                                                    fontSize = 10.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
+                                                )
+                                            }
+                                        }
+
                                         val seatId = "$row$col"
                                         val isSelected = selectedSeats.contains(seatId)
                                         val isBooked = bookedSeats.contains(seatId)
-                                        val isVIP = row == "E" || row == "F" || row == "G" || row == "H" || row == "I"
-                                        val isCouple = row == "J"
+                                        val isVIP = row in listOf("E", "F", "G", "H", "I") || (rowCount <= 6 && row in listOf("C", "D", "E"))
+                                        val isCouple = row == "J" || (rowCount > 2 && row == dynamicRows.last())
 
                                         val seatBg = when {
                                             isBooked -> Color(0xFF333333)
@@ -2165,9 +2252,12 @@ fun BookingFlowScreen(
                                             else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                                         }
 
+                                        val seatSize = if (colCount > 8) 22.dp else 26.dp
+
                                         Box(
                                             modifier = Modifier
-                                                .size(width = 24.dp, height = 24.dp)
+                                                .padding(horizontal = 2.dp)
+                                                .size(width = seatSize, height = 24.dp)
                                                 .clip(RoundedCornerShape(5.dp))
                                                 .background(seatBg)
                                                 .border(seatBorder, RoundedCornerShape(5.dp))
@@ -2190,23 +2280,24 @@ fun BookingFlowScreen(
                                             )
                                         }
                                     }
+
+                                    Spacer(modifier = Modifier.width(2.dp))
+
+                                    // Row label Right
+                                    Text(
+                                        text = row,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.width(18.dp)
+                                    )
                                 }
-
-                                Spacer(modifier = Modifier.width(2.dp))
-
-                                // Row label Right
-                                Text(
-                                    text = row,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.width(18.dp)
-                                )
                             }
                         }
                     }
                 }
+
 
                 Spacer(modifier = Modifier.height(14.dp))
 
@@ -3127,6 +3218,8 @@ fun TicketsScreen(viewModel: MovieViewModel) {
     }
 
     var selectedTicketForEnlarge by remember { mutableStateOf<Ticket?>(null) }
+    var ticketToDelete by remember { mutableStateOf<Ticket?>(null) }
+    var showClearAllConfirmDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -3148,15 +3241,33 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                 modifier = Modifier.align(Alignment.Center)
             )
 
-            IconButton(
-                onClick = { viewModel.refreshDataFromSupabase() },
-                modifier = Modifier.align(Alignment.CenterEnd)
+            Row(
+                modifier = Modifier.align(Alignment.CenterEnd),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Refresh,
-                    contentDescription = "Đồng bộ Supabase",
-                    tint = Color.White
-                )
+                if (isLoggedIn && myTickets.isNotEmpty()) {
+                    IconButton(
+                        onClick = { showClearAllConfirmDialog = true },
+                        modifier = Modifier.testTag("clear_all_tickets_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.DeleteSweep,
+                            contentDescription = "Xóa tất cả vé cũ",
+                            tint = Color.White
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = { viewModel.refreshDataFromSupabase() },
+                    modifier = Modifier.testTag("refresh_tickets_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = "Đồng bộ Supabase",
+                        tint = Color.White
+                    )
+                }
             }
         }
 
@@ -3246,11 +3357,94 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                     TicketHistoryItem(
                         ticket = ticket,
                         viewModel = viewModel,
-                        onTicketClick = { selectedTicketForEnlarge = it }
+                        onTicketClick = { selectedTicketForEnlarge = it },
+                        onDeleteClick = { ticketToDelete = it }
                     )
                 }
             }
         }
+    }
+
+    // Dialog xác nhận xóa tất cả vé cũ
+    if (showClearAllConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearAllConfirmDialog = false },
+            title = {
+                Text(
+                    text = "Xóa tất cả vé cũ?",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = "Bạn có chắc chắn muốn xóa toàn bộ ${myTickets.size} vé trong lịch sử đặt vé không? Thao tác này sẽ dọn sạch danh sách vé trên thiết bị.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.clearAllTickets()
+                        showClearAllConfirmDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("confirm_clear_all_tickets")
+                ) {
+                    Text("Xóa tất cả", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showClearAllConfirmDialog = false }
+                ) {
+                    Text("Hủy")
+                }
+            }
+        )
+    }
+
+    // Dialog xác nhận xóa 1 vé cụ thể
+    if (ticketToDelete != null) {
+        val t = ticketToDelete!!
+        AlertDialog(
+            onDismissRequest = { ticketToDelete = null },
+            title = {
+                Text(
+                    text = "Xóa vé xem phim?",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = "Bạn có muốn xóa vé phim '${t.movieTitle}' (Suất: ${t.dateTime}, Ghế: ${t.seats}) khỏi lịch sử không?",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteTicket(t)
+                        ticketToDelete = null
+                        if (selectedTicketForEnlarge?.id == t.id) {
+                            selectedTicketForEnlarge = null
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("confirm_delete_single_ticket")
+                ) {
+                    Text("Xóa vé", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { ticketToDelete = null }
+                ) {
+                    Text("Hủy")
+                }
+            }
+        )
     }
 
     // Dialog phóng to vé cho dễ quét
@@ -3453,15 +3647,38 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                         )
                     }
                     
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
                     
-                    Button(
-                        onClick = { selectedTicketForEnlarge = null },
-                        colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary),
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text("Đóng", fontWeight = FontWeight.Bold, color = Color.White)
+                        OutlinedButton(
+                            onClick = {
+                                ticketToDelete = ticket
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.DeleteOutline,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Xóa vé", fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = { selectedTicketForEnlarge = null },
+                            colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Đóng", fontWeight = FontWeight.Bold, color = Color.White)
+                        }
                     }
                 }
             }
@@ -3470,7 +3687,12 @@ fun TicketsScreen(viewModel: MovieViewModel) {
 }
 
 @Composable
-fun TicketHistoryItem(ticket: Ticket, viewModel: MovieViewModel, onTicketClick: (Ticket) -> Unit) {
+fun TicketHistoryItem(
+    ticket: Ticket,
+    viewModel: MovieViewModel,
+    onTicketClick: (Ticket) -> Unit,
+    onDeleteClick: (Ticket) -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -3518,6 +3740,17 @@ fun TicketHistoryItem(ticket: Ticket, viewModel: MovieViewModel, onTicketClick: 
                         text = ticket.dateTime,
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                IconButton(
+                    onClick = { onDeleteClick(ticket) },
+                    modifier = Modifier.testTag("delete_ticket_btn_${ticket.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.DeleteOutline,
+                        contentDescription = "Xóa vé",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
                     )
                 }
             }

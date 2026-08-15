@@ -264,6 +264,17 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
         }
     }
 
+    suspend fun deleteTicket(ticketId: Int, barcode: String = "") = withContext(Dispatchers.IO) {
+        cinemaDao.deleteTicket(ticketId)
+        if (barcode.isNotBlank()) {
+            com.example.data.supabase.SupabaseSyncService.deleteTicketFromSupabase(barcode) { }
+        }
+    }
+
+    suspend fun deleteAllTickets() = withContext(Dispatchers.IO) {
+        cinemaDao.deleteAllTickets()
+    }
+
     suspend fun syncTicketsFromSupabase() = withContext(Dispatchers.IO) {
         com.example.data.supabase.SupabaseSyncService.fetchTicketsFromSupabase { remoteTickets ->
             if (remoteTickets.isNotEmpty()) {

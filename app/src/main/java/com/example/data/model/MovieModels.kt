@@ -127,4 +127,26 @@ data class Booking(
     @Json(name = "user_email") val userEmail: String = ""
 )
 
+data class SeatItem(
+    val code: String = "",
+    val row: String = "",
+    val col: Int = 0,
+    val type: String = "NORMAL" // "NORMAL", "VIP", "COUPLE"
+)
+
+data class ScreeningRoom(
+    val id: String = "",
+    val name: String = "",
+    val totalSeats: Int = 0,
+    val regularSeats: Int = 0,
+    val vipSeats: Int = 0,
+    val rowsCount: Int = 0,
+    val colsCount: Int = 0,
+    val hasAisle: Boolean = true,
+    val seatLayout: List<SeatItem> = emptyList(),
+    val status: String = "HOAT_DONG"
+)
+
+
+
 

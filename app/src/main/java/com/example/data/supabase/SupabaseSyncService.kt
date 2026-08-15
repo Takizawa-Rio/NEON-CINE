@@ -9,12 +9,18 @@ import com.example.data.model.PromoCode
 import com.example.data.model.Product
 import com.example.data.model.Showtime
 import com.example.data.model.Booking
+import com.example.data.model.ScreeningRoom
+import com.example.data.model.SeatItem
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.Random
 import java.util.concurrent.TimeUnit
 
 /**
@@ -257,7 +263,7 @@ object SupabaseSyncService {
     }
 
     /**
-     * Đẩy vé đã thanh toán lên Supabase table 'tickets'
+     * Đẩy vé đã thanh toán lên Supabase table 'tickets' & 'bookings'
      */
     fun pushTicketToSupabase(ticket: Ticket, onComplete: (Boolean) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) {
@@ -265,31 +271,121 @@ object SupabaseSyncService {
             return
         }
 
-        val url = "$SUPABASE_URL/rest/v1/tickets"
-        val json = JSONObject().apply {
-            put("price", ticket.totalPrice)
-            put("seat_code", ticket.seats)
-            put("status", "paid")
+        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        val random = java.util.Random()
+        fun genStr(n: Int) = (1..n).map { chars[random.nextInt(chars.length)] }.joinToString("")
+
+        val bookingId = genStr(5)
+        val bookingCode = genStr(5)
+        val customerId = "2E1375F9"
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+
+        val showtimeId = "8df92b36-705b-43e7-a7dd-81822debe756"
+
+        // 1. Ghi vào bảng 'bookings'
+        val bookingJson = JSONObject().apply {
+            put("id", bookingId)
+            put("customer_id", customerId)
+            put("showtime_id", showtimeId)
+            put("total_amount", ticket.totalPrice.toDouble())
+            put("payment_method", "MOMO")
+            put("status", "PAID")
+            put("booking_date", todayStr)
+            put("booking_code", bookingCode)
+            if (ticket.combo.isNotBlank()) put("selected_popcorns", ticket.combo)
+            if (ticket.userName.isNotBlank()) put("guest_name", ticket.userName)
         }.toString()
 
-        val request = Request.Builder()
-            .url(url)
+        val bookingReq = Request.Builder()
+            .url("$SUPABASE_URL/rest/v1/bookings")
             .addHeader("apikey", SUPABASE_ANON_KEY)
             .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
             .addHeader("Content-Type", "application/json")
             .addHeader("Prefer", "return=minimal")
-            .post(json.toRequestBody(jsonMediaType))
+            .post(bookingJson.toRequestBody(jsonMediaType))
             .build()
 
-        client.newCall(request).enqueue(object : Callback {
+        client.newCall(bookingReq).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Lỗi kết nối đẩy vé lên Supabase: ${e.message}")
+                Log.e(TAG, "Lỗi tạo booking trên Supabase: ${e.message}")
                 onComplete(false)
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
-                    Log.d(TAG, "Đã lưu vé lên Supabase: ${response.code}")
+                    Log.d(TAG, "Lưu booking lên Supabase: HTTP ${response.code}")
+                }
+
+                // 2. Ghi từng ghế vào bảng 'tickets'
+                val seatList = ticket.seats.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                val perSeatPrice = if (seatList.isNotEmpty()) (ticket.totalPrice.toDouble() / seatList.size) else ticket.totalPrice.toDouble()
+
+                for (seat in seatList) {
+                    val ticketId = "TK-" + genStr(6)
+                    val ticketCode = genStr(5)
+                    val isVip = seat.startsWith("E", ignoreCase = true) || seat.startsWith("F", ignoreCase = true) || seat.startsWith("G", ignoreCase = true)
+
+                    val ticketJson = JSONObject().apply {
+                        put("id", ticketId)
+                        put("ticket_code", ticketCode)
+                        put("booking_id", bookingId)
+                        put("showtime_id", showtimeId)
+                        put("seat_code", seat)
+                        put("seat_type", if (isVip) "VIP" else "NORMAL")
+                        put("price", perSeatPrice)
+                        put("status", "SOLD")
+                        put("customer_id", customerId)
+                        put("source", "APP")
+                    }.toString()
+
+                    val ticketReq = Request.Builder()
+                        .url("$SUPABASE_URL/rest/v1/tickets")
+                        .addHeader("apikey", SUPABASE_ANON_KEY)
+                        .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+                        .addHeader("Content-Type", "application/json")
+                        .addHeader("Prefer", "return=minimal")
+                        .post(ticketJson.toRequestBody(jsonMediaType))
+                        .build()
+
+                    client.newCall(ticketReq).enqueue(object : Callback {
+                        override fun onFailure(call: Call, e: IOException) {
+                            Log.e(TAG, "Lỗi tạo ticket $seat: ${e.message}")
+                        }
+                        override fun onResponse(call: Call, res: Response) {
+                            res.use {
+                                Log.d(TAG, "Lưu ticket $seat lên Supabase: HTTP ${res.code}")
+                            }
+                        }
+                    })
+                }
+                onComplete(true)
+            }
+        })
+    }
+
+    /**
+     * Xóa vé khỏi Supabase
+     */
+    fun deleteTicketFromSupabase(barcode: String, onComplete: (Boolean) -> Unit) {
+        if (SUPABASE_URL.contains("your-project-id") || barcode.isBlank()) {
+            onComplete(true)
+            return
+        }
+        val ticketCode = barcode.takeLast(5)
+        val url = "$SUPABASE_URL/rest/v1/tickets?ticket_code=eq.$ticketCode"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("apikey", SUPABASE_ANON_KEY)
+            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+            .delete()
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                onComplete(false)
+            }
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
                     onComplete(response.isSuccessful)
                 }
             }
@@ -931,4 +1027,95 @@ object SupabaseSyncService {
             }
         })
     }
+
+    /**
+     * Đồng bộ danh sách phòng chiếu & sơ đồ ghế từ Supabase table 'screening_room'
+     */
+    fun fetchScreeningRoomsFromSupabase(onResult: (List<ScreeningRoom>) -> Unit) {
+        if (SUPABASE_URL.contains("your-project-id")) {
+            onResult(emptyList())
+            return
+        }
+
+        val url = "$SUPABASE_URL/rest/v1/screening_room?select=*"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("apikey", SUPABASE_ANON_KEY)
+            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e(TAG, "Lỗi fetch screening_room từ Supabase: ${e.message}")
+                onResult(emptyList())
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!response.isSuccessful) {
+                        Log.e(TAG, "Supabase screening_room phản hồi lỗi: ${response.code}")
+                        onResult(emptyList())
+                        return
+                    }
+                    val bodyString = response.body?.string() ?: ""
+                    val list = mutableListOf<ScreeningRoom>()
+                    try {
+                        val jsonArray = JSONArray(bodyString)
+                        for (i in 0 until jsonArray.length()) {
+                            val obj = jsonArray.getJSONObject(i)
+                            val id = obj.optString("id", "ROOM_${i+1}")
+                            val name = when {
+                                obj.has("ten_phong") -> obj.optString("ten_phong")
+                                obj.has("name") -> obj.optString("name")
+                                else -> "Phòng Chiếu ${i+1}"
+                            }
+                            val totalSeats = obj.optInt("tong_so_ghe", 0)
+                            val regSeats = obj.optInt("so_luong_ghe_thuong", 0)
+                            val vipSeats = obj.optInt("so_luong_ghe_vip", 0)
+                            val rowsCount = obj.optInt("so_hang_ghe", 0)
+                            val colsCount = obj.optInt("so_cot_ghe", 0)
+                            val hasAisle = obj.optBoolean("co_loi_di", true)
+                            val status = obj.optString("trang_thai", "HOAT_DONG")
+
+                            val seatLayoutList = mutableListOf<SeatItem>()
+                            if (obj.has("seat_layout") && !obj.isNull("seat_layout")) {
+                                val layoutArr = obj.optJSONArray("seat_layout")
+                                if (layoutArr != null) {
+                                    for (j in 0 until layoutArr.length()) {
+                                        val sObj = layoutArr.getJSONObject(j)
+                                        val code = sObj.optString("code", "")
+                                        val r = sObj.optString("row", "")
+                                        val c = sObj.optInt("col", 0)
+                                        val t = sObj.optString("type", "NORMAL")
+                                        seatLayoutList.add(SeatItem(code = code, row = r, col = c, type = t))
+                                    }
+                                }
+                            }
+
+                            list.add(
+                                ScreeningRoom(
+                                    id = id,
+                                    name = name,
+                                    totalSeats = totalSeats,
+                                    regularSeats = regSeats,
+                                    vipSeats = vipSeats,
+                                    rowsCount = rowsCount,
+                                    colsCount = colsCount,
+                                    hasAisle = hasAisle,
+                                    seatLayout = seatLayoutList,
+                                    status = status
+                                )
+                            )
+                        }
+                        onResult(list)
+                        Log.d(TAG, "Fetch thành công ${list.size} screening_rooms từ Supabase!")
+                    } catch (ex: Exception) {
+                        Log.e(TAG, "Lỗi parse screening_room: ${ex.message}")
+                        onResult(emptyList())
+                    }
+                }
+            }
+        })
+    }
 }
+
