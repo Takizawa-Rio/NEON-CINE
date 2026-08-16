@@ -47,7 +47,8 @@ data class Ticket(
     val timestamp: Long = System.currentTimeMillis(),
     @Json(name = "user_email") val userEmail: String = "",
     @Json(name = "user_name") val userName: String = "",
-    @Json(name = "promo_code") val promoCode: String = ""
+    @Json(name = "promo_code") val promoCode: String = "",
+    @Json(name = "booking_code") val bookingCode: String = ""
 )
 
 data class UserProfile(
@@ -86,6 +87,7 @@ data class Showtime(
     val id: Int = 0,
     @Json(name = "movie_id") val movieId: Int = 0,
     val movieStringId: String = "",
+    @Json(name = "movie_title") val movieTitle: String = "",
     @Json(name = "start_time") val startTime: String = "",
     @Json(name = "end_time") val endTime: String = "",
     val price: Int = 0,

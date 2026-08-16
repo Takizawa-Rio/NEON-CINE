@@ -410,11 +410,8 @@ fun ShowtimeMovieCard(
 ) {
     val dbShowtimes = viewModel?.showtimes?.collectAsStateWithLifecycle()?.value
     val showtimes = remember(movie.id, movie.stringId, selectedDate, dbShowtimes) {
-        val listFromDb = dbShowtimes?.filter { 
-            (it.movieId == movie.id || (movie.stringId.isNotEmpty() && it.movieStringId == movie.stringId)) &&
-            (selectedDate.isBlank() || it.date.isBlank() || it.date == selectedDate)
-        }?.map { it.startTime }?.filter { it.isNotBlank() }
-        listFromDb?.distinct() ?: emptyList()
+        viewModel?.getShowtimesForMovieAndDate(movie, selectedDate)
+            ?: listOf("09:30", "11:45", "14:15", "16:45", "19:00", "21:30")
     }
 
     Card(

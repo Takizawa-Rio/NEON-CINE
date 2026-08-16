@@ -239,6 +239,73 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     )
 
 
+    private fun extractDayMonth(str: String): Pair<Int, Int>? {
+        if (str.isBlank()) return null
+        try {
+            val clean = str.substringBefore(" lúc ")
+                .substringBefore("T")
+                .substringBefore(" - ")
+                .trim()
+
+            // Check YYYY-MM-DD
+            val ymdMatch = Regex("""(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})""").find(clean)
+            if (ymdMatch != null) {
+                val m = ymdMatch.groupValues[2].toIntOrNull()
+                val d = ymdMatch.groupValues[3].toIntOrNull()
+                if (m != null && d != null) return Pair(d, m)
+            }
+            // Check DD/MM or DD-MM or DD/MM/YYYY
+            val dmyMatch = Regex("""(\d{1,2})[-/.](\d{1,2})""").find(clean)
+            if (dmyMatch != null) {
+                val d = dmyMatch.groupValues[1].toIntOrNull()
+                val m = dmyMatch.groupValues[2].toIntOrNull()
+                if (d != null && m != null) return Pair(d, m)
+            }
+        } catch (e: Exception) {
+            // Ignore
+        }
+        return null
+    }
+
+    private fun extractHourMinute(str: String): Pair<Int, Int>? {
+        if (str.isBlank()) return null
+        try {
+            val timeMatch = Regex("""(\d{1,2})[:h](\d{2})""").find(str)
+            if (timeMatch != null) {
+                val h = timeMatch.groupValues[1].toIntOrNull()
+                val m = timeMatch.groupValues[2].toIntOrNull()
+                if (h != null && m != null) return Pair(h, m)
+            }
+        } catch (e: Exception) {
+            // Ignore
+        }
+        return null
+    }
+
+    fun isDateMatch(d1: String, d2: String): Boolean {
+        if (d1.isBlank() || d2.isBlank()) return true
+        if (d1.equals(d2, ignoreCase = true)) return true
+        if (d1.contains(d2, ignoreCase = true) || d2.contains(d1, ignoreCase = true)) return true
+        val dm1 = extractDayMonth(d1)
+        val dm2 = extractDayMonth(d2)
+        if (dm1 != null && dm2 != null) {
+            return dm1.first == dm2.first && dm1.second == dm2.second
+        }
+        return false
+    }
+
+    fun isTimeMatch(t1: String, t2: String): Boolean {
+        if (t1.isBlank() || t2.isBlank()) return true
+        if (t1.equals(t2, ignoreCase = true)) return true
+        if (t1.contains(t2, ignoreCase = true) || t2.contains(t1, ignoreCase = true)) return true
+        val hm1 = extractHourMinute(t1)
+        val hm2 = extractHourMinute(t2)
+        if (hm1 != null && hm2 != null) {
+            return hm1.first == hm2.first && hm1.second == hm2.second
+        }
+        return false
+    }
+
     private fun isDateTodayOrFuture(dateStr: String): Boolean {
         if (dateStr.isBlank()) return true
         try {
@@ -308,6 +375,31 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         return Long.MAX_VALUE
     }
 
+    // Format ngày chiếu về dd/MM thống nhất
+    fun formatShowtimeDate(dateStr: String): String {
+        if (dateStr.isBlank()) return ""
+        try {
+            if (dateStr.contains("-")) {
+                val parts = dateStr.substringBefore("T").trim().split("-")
+                if (parts.size >= 3) {
+                    val d = parts[2].padStart(2, '0')
+                    val m = parts[1].padStart(2, '0')
+                    return "$d/$m"
+                }
+            } else if (dateStr.contains("/")) {
+                val parts = dateStr.split("/")
+                if (parts.size >= 2) {
+                    val d = parts[0].padStart(2, '0')
+                    val m = parts[1].padStart(2, '0')
+                    return "$d/$m"
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore
+        }
+        return dateStr
+    }
+
     // Danh sách ngày chiếu động từ Supabase (Chỉ lấy từ hôm nay trở đi, sắp xếp theo thứ tự thời gian)
     val availableDates: StateFlow<List<String>> = combine(_selectedMovie, _showtimes) { movie, list ->
         val sdf = SimpleDateFormat("dd/MM", Locale.getDefault())
@@ -320,10 +412,10 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
         if (movie != null) {
             val datesFromDb = list.filter {
-                (it.movieId == movie.id || (movie.stringId.isNotEmpty() && it.movieStringId == movie.stringId)) &&
+                (it.movieId == movie.id || (movie.stringId.isNotEmpty() && (it.movieStringId == movie.stringId || it.movieStringId == "FILM_${movie.id}" || it.movieStringId == "${movie.id}")) || (it.movieTitle.isNotBlank() && it.movieTitle.equals(movie.title, ignoreCase = true))) &&
                 it.date.isNotBlank() &&
                 isDateTodayOrFuture(it.date)
-            }.map { it.date }.distinct().sortedBy { parseDateForSort(it) }
+            }.map { formatShowtimeDate(it.date) }.distinct().sortedBy { parseDateForSort(it) }
 
             if (datesFromDb.isNotEmpty()) {
                 return@combine datesFromDb
@@ -336,32 +428,47 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         initialValue = emptyList()
     )
 
-    // Danh sách suất chiếu theo thời gian động từ cơ sở dữ liệu Supabase (không dùng dữ liệu giả)
+    // Các khung giờ chiếu tiêu chuẩn khi ngày chưa có lịch chiếu riêng trong CSDL
+    val defaultShowtimeSlots = listOf("09:30", "11:45", "14:15", "16:45", "19:00", "21:30")
+
+    // Lấy danh sách suất chiếu cho một phim và ngày chiếu cụ thể (luôn đảm bảo có suất chiếu hiển thị)
+    fun getShowtimesForMovieAndDate(movie: Movie, date: String): List<String> {
+        val list = _showtimes.value
+        val movieShowtimes = list.filter {
+            (it.movieId == movie.id || (movie.stringId.isNotEmpty() && (it.movieStringId == movie.stringId || it.movieStringId == "FILM_${movie.id}" || it.movieStringId == "${movie.id}")) || (it.movieTitle.isNotBlank() && it.movieTitle.equals(movie.title, ignoreCase = true))) &&
+            (date.isBlank() || it.date.isBlank() || it.date == date || isDateMatch(it.date, date))
+        }.map { it.startTime }.filter { it.isNotBlank() }.distinct().sorted()
+
+        return if (movieShowtimes.isNotEmpty()) movieShowtimes else defaultShowtimeSlots
+    }
+
+    // Danh sách suất chiếu theo thời gian động từ cơ sở dữ liệu Supabase (và hỗ trợ khung giờ đầy đủ)
     val availableTimeSlots: StateFlow<List<String>> = combine(_selectedMovie, _selectedDate, _showtimes) { movie, date, list ->
         if (movie != null) {
             val movieShowtimes = list.filter {
-                (it.movieId == movie.id || (movie.stringId.isNotEmpty() && it.movieStringId == movie.stringId)) &&
-                (date.isBlank() || it.date.isBlank() || it.date == date)
-            }.map { it.startTime }.filter { it.isNotBlank() }
+                (it.movieId == movie.id || (movie.stringId.isNotEmpty() && (it.movieStringId == movie.stringId || it.movieStringId == "FILM_${movie.id}" || it.movieStringId == "${movie.id}")) || (it.movieTitle.isNotBlank() && it.movieTitle.equals(movie.title, ignoreCase = true))) &&
+                (date.isBlank() || it.date.isBlank() || it.date == date || isDateMatch(it.date, date))
+            }.map { it.startTime }.filter { it.isNotBlank() }.distinct().sorted()
             if (movieShowtimes.isNotEmpty()) {
-                return@combine movieShowtimes.distinct().sorted()
+                return@combine movieShowtimes
             }
         }
-        emptyList()
+        defaultShowtimeSlots
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyList()
+        initialValue = listOf("09:30", "11:45", "14:15", "16:45", "19:00", "21:30")
     )
 
-    // Danh sách ghế đã được đặt cho suất chiếu hiện tại (đồng bộ từ cả tickets & bookings trong Supabase)
+    // Danh sách ghế đã được đặt cho suất chiếu hiện tại (đồng bộ từ cả tickets & bookings trong Supabase, hỗ trợ chuẩn hóa A1 <-> A01)
     val bookedSeats: StateFlow<Set<String>> = combine(
         _selectedMovie,
         _selectedCinema,
         _selectedDate,
         _selectedTime,
         tickets,
-        _bookings
+        _bookings,
+        _showtimes
     ) { flowArray ->
         val movie = flowArray[0] as? Movie
         val cinema = flowArray[1] as? String ?: ""
@@ -371,31 +478,104 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         val allTickets = flowArray[4] as? List<Ticket> ?: emptyList()
         @Suppress("UNCHECKED_CAST")
         val allBookings = flowArray[5] as? List<com.example.data.model.Booking> ?: emptyList()
+        @Suppress("UNCHECKED_CAST")
+        val allShowtimes = flowArray[6] as? List<com.example.data.model.Showtime> ?: emptyList()
 
         if (movie == null) return@combine emptySet<String>()
-        val dateTimeTarget = "$date lúc $time"
-        val seatsFromTickets = allTickets
-            .filter { ticket ->
-                ticket.movieId == movie.id &&
-                (ticket.cinema.isEmpty() || ticket.cinema == cinema) &&
-                (ticket.dateTime.isEmpty() || ticket.dateTime.contains(time) || ticket.dateTime == dateTimeTarget)
+
+        val rawSeatStrings = mutableListOf<String>()
+
+        // 1. Lọc ghế từ danh sách vé (Tickets)
+        for (ticket in allTickets) {
+            val movieMatches = (ticket.movieId > 0 && ticket.movieId == movie.id) ||
+                (ticket.movieTitle.isNotBlank() && (
+                    ticket.movieTitle.equals(movie.title, ignoreCase = true) ||
+                    ticket.movieTitle.contains(movie.title, ignoreCase = true) ||
+                    movie.title.contains(ticket.movieTitle, ignoreCase = true) ||
+                    (movie.stringId.isNotEmpty() && (ticket.movieTitle.contains(movie.stringId, ignoreCase = true) || ticket.movieTitle == movie.stringId))
+                ))
+            val cinemaMatches = ticket.cinema.isBlank() || cinema.isBlank() ||
+                ticket.cinema.equals(cinema, ignoreCase = true) ||
+                ticket.cinema.contains(cinema, ignoreCase = true) ||
+                cinema.contains(ticket.cinema, ignoreCase = true)
+            val dateMatches = isDateMatch(ticket.dateTime, date)
+            val timeMatches = isTimeMatch(ticket.dateTime, time)
+
+            if (movieMatches && cinemaMatches && dateMatches && timeMatches) {
+                rawSeatStrings.add(ticket.seats)
             }
-            .flatMap { ticket ->
-                ticket.seats.split(",").map { it.trim() }
+        }
+
+        // 2. Lọc ghế từ danh sách Bookings trên Supabase
+        for (booking in allBookings) {
+            val matchedShowtime = allShowtimes.find { it.id == booking.showtimeId }
+            val isBookingForCurrentShow: Boolean
+            if (matchedShowtime != null) {
+                val mMatch = (matchedShowtime.movieId > 0 && matchedShowtime.movieId == movie.id) ||
+                    (movie.stringId.isNotEmpty() && (matchedShowtime.movieStringId == movie.stringId || matchedShowtime.movieStringId == "FILM_${movie.id}" || matchedShowtime.movieStringId == "${movie.id}")) ||
+                    (matchedShowtime.movieTitle.isNotBlank() && (
+                        matchedShowtime.movieTitle.equals(movie.title, ignoreCase = true) ||
+                        matchedShowtime.movieTitle.contains(movie.title, ignoreCase = true) ||
+                        movie.title.contains(matchedShowtime.movieTitle, ignoreCase = true)
+                    ))
+                val dMatch = isDateMatch(matchedShowtime.date, date)
+                val tMatch = isTimeMatch(matchedShowtime.startTime, time)
+                isBookingForCurrentShow = mMatch && dMatch && tMatch
+            } else {
+                isBookingForCurrentShow = (booking.movieId > 0 && booking.movieId == movie.id) || booking.movieId == 0
             }
 
-        val seatsFromBookings = allBookings
-            .filter { booking -> booking.movieId == movie.id }
-            .flatMap { booking -> booking.seats.split(",").map { it.trim() } }
+            if (isBookingForCurrentShow && booking.seats.isNotBlank()) {
+                rawSeatStrings.add(booking.seats)
+            }
+        }
 
-        (seatsFromTickets + seatsFromBookings)
-            .filter { it.isNotEmpty() }
-            .toSet()
+        // 3. Chuẩn hóa tất cả các mã ghế đã đặt (A1, A01, E-5, E5,...)
+        val resultSet = mutableSetOf<String>()
+        for (seatStr in rawSeatStrings) {
+            if (seatStr.isBlank()) continue
+            val tokens = seatStr.replace("[", " ")
+                .replace("]", " ")
+                .replace("\"", "")
+                .replace("'", "")
+                .split(",", ";", "\n", "  ")
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+
+            for (token in tokens) {
+                resultSet.add(token)
+                resultSet.add(token.uppercase())
+                val matches = Regex("""([A-Za-z])[-_ ]?0*([0-9]{1,2})""").findAll(token)
+                for (m in matches) {
+                    val row = m.groupValues[1].uppercase()
+                    val col = m.groupValues[2].toIntOrNull() ?: continue
+                    resultSet.add("$row$col")
+                    resultSet.add("$row${col.toString().padStart(2, '0')}")
+                    resultSet.add("$row-$col")
+                    resultSet.add("$row $col")
+                }
+            }
+        }
+        resultSet
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
+        started = SharingStarted.Eagerly,
         initialValue = emptySet()
     )
+
+    fun isSeatBooked(seat: String): Boolean {
+        val booked = bookedSeats.value
+        if (booked.contains(seat)) return true
+        val clean = seat.replace("-", "").replace(" ", "").trim().uppercase()
+        if (booked.contains(clean)) return true
+        val match = Regex("""([A-Za-z])[-_ ]?0*([0-9]{1,2})""").find(seat)
+        if (match != null) {
+            val r = match.groupValues[1].uppercase()
+            val c = match.groupValues[2].toIntOrNull() ?: 0
+            if (booked.contains("$r$c") || booked.contains("$r${c.toString().padStart(2, '0')}")) return true
+        }
+        return false
+    }
 
 
     val defaultProducts = listOf(
@@ -433,6 +613,14 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         ),
         com.example.data.model.Product(
             id = 5,
+            name = "Bắp Rang Bơ Phô Mai Size L",
+            price = 45000,
+            imageUrl = "https://images.unsplash.com/photo-1572177191856-3cde618dee1f?w=500",
+            description = "Bắp rang bơ lắc bột phô mai béo ngậy hảo hạng",
+            type = "snack"
+        ),
+        com.example.data.model.Product(
+            id = 6,
             name = "Nước Ngọt Coca-Cola Size L (32oz)",
             price = 32000,
             imageUrl = "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=500",
@@ -440,7 +628,15 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             type = "drink"
         ),
         com.example.data.model.Product(
-            id = 6,
+            id = 7,
+            name = "Nước Ngọt Sprite Size L (32oz)",
+            price = 32000,
+            imageUrl = "https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?w=500",
+            description = "Nước ngọt vị chanh Sprite sảng khoái mát lạnh",
+            type = "drink"
+        ),
+        com.example.data.model.Product(
+            id = 8,
             name = "Nước Suối Tinh Khiết Dasani 500ml",
             price = 20000,
             imageUrl = "https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=500",
@@ -826,12 +1022,11 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
             loadShowtimesAndBookingsFromSupabase()
             val movieTimes = _showtimes.value.filter {
-                (it.movieId == movie.id || (movie.stringId.isNotEmpty() && it.movieStringId == movie.stringId)) &&
-                (_selectedDate.value.isBlank() || it.date.isBlank() || it.date == _selectedDate.value)
+                (it.movieId == movie.id || (movie.stringId.isNotEmpty() && (it.movieStringId == movie.stringId || it.movieStringId == "FILM_${movie.id}" || it.movieStringId == "${movie.id}"))) &&
+                (_selectedDate.value.isBlank() || it.date.isBlank() || it.date == _selectedDate.value || isDateMatch(it.date, _selectedDate.value))
             }.map { it.startTime }.filter { it.isNotBlank() }.sorted()
-            if (movieTimes.isNotEmpty()) {
-                _selectedTime.value = movieTimes.first()
-            }
+            val available = if (movieTimes.isNotEmpty()) movieTimes else defaultShowtimeSlots
+            _selectedTime.value = available.firstOrNull() ?: "19:00"
             // Tự động đồng bộ các đánh giá từ Supabase và Room khi mở xem một bộ phim
             viewModelScope.launch {
                 repository.getReviewsForMovie(movie.id)
@@ -845,6 +1040,9 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         _isBookingFlowActive.value = true
+        if (_selectedTime.value.isBlank() || !availableTimeSlots.value.contains(_selectedTime.value)) {
+            _selectedTime.value = availableTimeSlots.value.firstOrNull() ?: "19:00"
+        }
         loadShowtimesAndBookingsFromSupabase()
         // Đồng bộ vé mới nhất từ Supabase khi mở luồng đặt vé
         viewModelScope.launch {
@@ -869,15 +1067,14 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         _selectedDate.value = date
         _selectedSeats.value = emptySet() // Reset selected seats when date changes
         val movie = _selectedMovie.value
-        if (movie != null) {
+        val slots = if (movie != null) {
             val movieTimes = _showtimes.value.filter {
-                (it.movieId == movie.id || (movie.stringId.isNotEmpty() && it.movieStringId == movie.stringId)) &&
-                (date.isBlank() || it.date.isBlank() || it.date == date)
-            }.map { it.startTime }.filter { it.isNotBlank() }
-            if (movieTimes.isNotEmpty()) {
-                _selectedTime.value = movieTimes.first()
-            }
-        }
+                (it.movieId == movie.id || (movie.stringId.isNotEmpty() && (it.movieStringId == movie.stringId || it.movieStringId == "FILM_${movie.id}" || it.movieStringId == "${movie.id}"))) &&
+                (date.isBlank() || it.date.isBlank() || it.date == date || isDateMatch(it.date, date))
+            }.map { it.startTime }.filter { it.isNotBlank() }.distinct().sorted()
+            if (movieTimes.isNotEmpty()) movieTimes else defaultShowtimeSlots
+        } else defaultShowtimeSlots
+        _selectedTime.value = slots.firstOrNull() ?: "19:00"
     }
 
     fun selectTime(time: String) {
@@ -886,7 +1083,9 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleSeat(seat: String) {
-        if (bookedSeats.value.contains(seat)) return // Ngăn chọn ghế đã được đặt trước đó
+        if (isSeatBooked(seat)) {
+            return // Ngăn chọn ghế đã được đặt trước đó
+        }
         val current = _selectedSeats.value.toMutableSet()
         if (current.contains(seat)) {
             current.remove(seat)
@@ -1213,6 +1412,8 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
         // Mô tả bắp nước
         val comboStr = getProductsSummary()
+        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        val bookingCode = (1..5).map { chars.random() }.joinToString("")
         val barcode = "NEON-" + UUID.randomUUID().toString().substring(0, 8).uppercase(Locale.getDefault())
 
         val ticket = Ticket(
@@ -1225,6 +1426,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             totalPrice = cost,
             combo = comboStr,
             barcode = barcode,
+            bookingCode = bookingCode,
             userEmail = _userEmail.value,
             userName = _userName.value,
             promoCode = promoToMarkUsed?.code ?: ""
@@ -1233,8 +1435,8 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.bookTicket(ticket)
             addNotification(
-                title = "🎟️ Đặt vé thành công",
-                message = "Vé phim ${movie.title} tại ${_selectedCinema.value}, suất ${_selectedDate.value} lúc ${_selectedTime.value}. Ghế chọn: $seatsStr. Mã vé: $barcode",
+                title = "🎟️ Đặt vé thành công - Mã: $bookingCode",
+                message = "Vé phim ${movie.title} tại ${_selectedCinema.value}, suất ${_selectedDate.value} lúc ${_selectedTime.value}. Ghế chọn: $seatsStr. Mã đặt vé: $bookingCode (Mã vạch: $barcode)",
                 type = "booking"
             )
             onSuccess()

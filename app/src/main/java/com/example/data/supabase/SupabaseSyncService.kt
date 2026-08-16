@@ -237,6 +237,17 @@ object SupabaseSyncService {
                     obj.has("movie_id") -> obj.optInt("movie_id", 0)
                     else -> 0
                 }
+                val seatVal = when {
+                    obj.has("seats") && obj.optString("seats").isNotBlank() -> obj.optString("seats")
+                    obj.has("seat_code") && obj.optString("seat_code").isNotBlank() -> obj.optString("seat_code")
+                    obj.has("seat") && obj.optString("seat").isNotBlank() -> obj.optString("seat")
+                    obj.has("seat_id") && obj.optString("seat_id").isNotBlank() -> obj.optString("seat_id")
+                    obj.has("seat_number") && obj.optString("seat_number").isNotBlank() -> obj.optString("seat_number")
+                    obj.has("seat_name") && obj.optString("seat_name").isNotBlank() -> obj.optString("seat_name")
+                    obj.has("seat_codes") && obj.optString("seat_codes").isNotBlank() -> obj.optString("seat_codes")
+                    obj.has("selected_seats") && obj.optString("selected_seats").isNotBlank() -> obj.optString("selected_seats")
+                    else -> obj.optString("seats", obj.optString("seat_code", ""))
+                }
                 list.add(
                     Ticket(
                         id = obj.optInt("id", i + 1),
@@ -245,14 +256,15 @@ object SupabaseSyncService {
                         moviePoster = obj.optString("movie_poster", obj.optString("moviePoster", "")),
                         cinema = obj.optString("cinema", "Neon Cine Space"),
                         dateTime = obj.optString("date_time", obj.optString("dateTime", "")),
-                        seats = obj.optString("seats", obj.optString("seat_code", "")),
+                        seats = seatVal,
                         totalPrice = obj.optInt("total_price", obj.optInt("price", 0)),
                         combo = obj.optString("combo", ""),
                         barcode = obj.optString("barcode", "NEON-${System.currentTimeMillis() % 100000}"),
                         timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
                         userEmail = obj.optString("user_email", obj.optString("userEmail", "")),
                         userName = obj.optString("user_name", obj.optString("userName", "")),
-                        promoCode = obj.optString("promo_code", obj.optString("promoCode", ""))
+                        promoCode = obj.optString("promo_code", obj.optString("promoCode", "")),
+                        bookingCode = obj.optString("booking_code", obj.optString("bookingCode", obj.optString("ticket_code", "")))
                     )
                 )
             }
@@ -276,7 +288,7 @@ object SupabaseSyncService {
         fun genStr(n: Int) = (1..n).map { chars[random.nextInt(chars.length)] }.joinToString("")
 
         val bookingId = genStr(5)
-        val bookingCode = genStr(5)
+        val bookingCode = if (ticket.bookingCode.isNotBlank()) ticket.bookingCode else genStr(5)
         val customerId = "2E1375F9"
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 
@@ -566,12 +578,24 @@ object SupabaseSyncService {
     }
 
     /**
-     * Đồng bộ danh sách sản phẩm / combo bắp nước từ Supabase table 'products' hoặc 'combos'
+     * Đồng bộ danh sách sản phẩm / combo bắp nước từ Supabase (thử lần lượt các bảng products, combos, popcorns, food_and_drinks, foods, concessions, items)
      */
     fun fetchProductsFromSupabase(onResult: (List<Product>) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) return
+        fetchProductsFromTables(
+            tables = listOf("products", "combos", "popcorns", "food_and_drinks", "food", "foods", "concessions", "items", "snacks"),
+            index = 0,
+            onResult = onResult
+        )
+    }
 
-        val url = "$SUPABASE_URL/rest/v1/products?select=*"
+    private fun fetchProductsFromTables(tables: List<String>, index: Int, onResult: (List<Product>) -> Unit) {
+        if (index >= tables.size) {
+            onResult(emptyList())
+            return
+        }
+        val tableName = tables[index]
+        val url = "$SUPABASE_URL/rest/v1/$tableName?select=*"
         val request = Request.Builder()
             .url(url)
             .addHeader("apikey", SUPABASE_ANON_KEY)
@@ -580,22 +604,23 @@ object SupabaseSyncService {
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                fetchCombosFromSupabase(onResult)
+                Log.e(TAG, "Lỗi fetch $tableName từ Supabase: ${e.message}")
+                fetchProductsFromTables(tables, index + 1, onResult)
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     if (!response.isSuccessful) {
-                        fetchCombosFromSupabase(onResult)
+                        fetchProductsFromTables(tables, index + 1, onResult)
                         return
                     }
                     val bodyString = response.body?.string() ?: ""
                     val list = parseProductsJson(bodyString)
                     if (list.isNotEmpty()) {
+                        Log.d(TAG, "Fetch thành công ${list.size} items từ bảng '$tableName' Supabase!")
                         onResult(list)
-                        Log.d(TAG, "Fetch thành công ${list.size} products từ Supabase!")
                     } else {
-                        fetchCombosFromSupabase(onResult)
+                        fetchProductsFromTables(tables, index + 1, onResult)
                     }
                 }
             }
@@ -603,32 +628,7 @@ object SupabaseSyncService {
     }
 
     fun fetchCombosFromSupabase(onResult: (List<Product>) -> Unit) {
-        if (SUPABASE_URL.contains("your-project-id")) return
-
-        val url = "$SUPABASE_URL/rest/v1/combos?select=*"
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("apikey", SUPABASE_ANON_KEY)
-            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
-            .build()
-
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Lỗi fetch combos từ Supabase: ${e.message}")
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (!response.isSuccessful) return
-                    val bodyString = response.body?.string() ?: ""
-                    val list = parseProductsJson(bodyString)
-                    if (list.isNotEmpty()) {
-                        onResult(list)
-                        Log.d(TAG, "Fetch thành công ${list.size} combos từ Supabase!")
-                    }
-                }
-            }
-        })
+        fetchProductsFromSupabase(onResult)
     }
 
     private fun parseProductsJson(bodyString: String): List<Product> {
@@ -639,15 +639,22 @@ object SupabaseSyncService {
                 val obj = jsonArray.getJSONObject(i)
                 val id = when {
                     obj.has("id") -> obj.optInt("id", i + 1)
+                    obj.has("product_id") -> obj.optInt("product_id", i + 1)
+                    obj.has("combo_id") -> obj.optInt("combo_id", i + 1)
+                    obj.has("item_id") -> obj.optInt("item_id", i + 1)
                     else -> i + 1
                 }
                 val name = when {
-                    obj.has("name") -> obj.optString("name")
-                    obj.has("ten") -> obj.optString("ten")
-                    obj.has("ten_san_pham") -> obj.optString("ten_san_pham")
-                    obj.has("ten_combo") -> obj.optString("ten_combo")
-                    obj.has("title") -> obj.optString("title")
-                    obj.has("combo_name") -> obj.optString("combo_name")
+                    obj.has("name") && obj.optString("name").isNotBlank() -> obj.optString("name")
+                    obj.has("ten") && obj.optString("ten").isNotBlank() -> obj.optString("ten")
+                    obj.has("ten_combo") && obj.optString("ten_combo").isNotBlank() -> obj.optString("ten_combo")
+                    obj.has("ten_san_pham") && obj.optString("ten_san_pham").isNotBlank() -> obj.optString("ten_san_pham")
+                    obj.has("ten_bap") && obj.optString("ten_bap").isNotBlank() -> obj.optString("ten_bap")
+                    obj.has("combo_name") && obj.optString("combo_name").isNotBlank() -> obj.optString("combo_name")
+                    obj.has("title") && obj.optString("title").isNotBlank() -> obj.optString("title")
+                    obj.has("product_name") && obj.optString("product_name").isNotBlank() -> obj.optString("product_name")
+                    obj.has("item_name") && obj.optString("item_name").isNotBlank() -> obj.optString("item_name")
+                    obj.has("label") && obj.optString("label").isNotBlank() -> obj.optString("label")
                     else -> "Combo Bắp + Nước"
                 }
                 var price = when {
@@ -656,13 +663,17 @@ object SupabaseSyncService {
                     obj.has("gia_tien") -> obj.optInt("gia_tien", 0)
                     obj.has("don_gia") -> obj.optInt("don_gia", 0)
                     obj.has("combo_price") -> obj.optInt("combo_price", 0)
+                    obj.has("unit_price") -> obj.optInt("unit_price", 0)
+                    obj.has("cost") -> obj.optInt("cost", 0)
+                    obj.has("amount") -> obj.optInt("amount", 0)
                     else -> 0
                 }
                 val type = when {
-                    obj.has("type") -> obj.optString("type")
-                    obj.has("loai") -> obj.optString("loai")
-                    name.contains("Nước", ignoreCase = true) || name.contains("Coca", ignoreCase = true) || name.contains("Sprite", ignoreCase = true) -> "drink"
-                    name.contains("Combo", ignoreCase = true) -> "combo"
+                    obj.has("type") && obj.optString("type").isNotBlank() -> obj.optString("type")
+                    obj.has("loai") && obj.optString("loai").isNotBlank() -> obj.optString("loai")
+                    obj.has("category") && obj.optString("category").isNotBlank() -> obj.optString("category")
+                    name.contains("Nước", ignoreCase = true) || name.contains("Coca", ignoreCase = true) || name.contains("Sprite", ignoreCase = true) || name.contains("Dasani", ignoreCase = true) -> "drink"
+                    name.contains("Combo", ignoreCase = true) || name.contains("Couple", ignoreCase = true) || name.contains("Family", ignoreCase = true) || name.contains("Solo", ignoreCase = true) -> "combo"
                     else -> "snack"
                 }
                 // Nếu bảng Supabase không có cột giá hoặc giá bằng 0, tự động gán giá hợp lý theo tên/loại
@@ -670,24 +681,35 @@ object SupabaseSyncService {
                     price = when {
                         name.contains("Family", ignoreCase = true) || name.contains("Party", ignoreCase = true) -> 145000
                         name.contains("Couple", ignoreCase = true) || name.contains("Đôi", ignoreCase = true) -> 95000
-                        name.contains("Combo", ignoreCase = true) -> 65000
-                        name.contains("Nước", ignoreCase = true) || name.contains("Coca", ignoreCase = true) -> 32000
+                        name.contains("Combo", ignoreCase = true) || name.contains("Solo", ignoreCase = true) -> 65000
+                        name.contains("Nước", ignoreCase = true) || name.contains("Coca", ignoreCase = true) || name.contains("Sprite", ignoreCase = true) -> 32000
                         name.contains("Dasani", ignoreCase = true) || name.contains("Suối", ignoreCase = true) -> 20000
                         else -> 45000
                     }
                 }
-                val imageUrl = when {
+                val rawImageUrl = when {
                     obj.has("image_url") -> obj.optString("image_url")
                     obj.has("image") -> obj.optString("image")
                     obj.has("hinh_anh") -> obj.optString("hinh_anh")
                     obj.has("anh") -> obj.optString("anh")
+                    obj.has("poster_url") -> obj.optString("poster_url")
+                    obj.has("photo_url") -> obj.optString("photo_url")
+                    obj.has("thumbnail_url") -> obj.optString("thumbnail_url")
+                    obj.has("img") -> obj.optString("img")
                     else -> ""
                 }
+                val imageUrl = if (rawImageUrl.isNotBlank()) rawImageUrl else when (type) {
+                    "combo" -> "https://images.unsplash.com/photo-1585647347483-22b66260dfff?w=500"
+                    "drink" -> "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=500"
+                    else -> "https://images.unsplash.com/photo-1572177191856-3cde618dee1f?w=500"
+                }
                 val desc = when {
-                    obj.has("description") -> obj.optString("description")
-                    obj.has("mo_ta") -> obj.optString("mo_ta")
-                    obj.has("desc") -> obj.optString("desc")
-                    else -> if (type == "combo") "Bắp rang bơ giòn rụm + nước ngọt mát lạnh" else "Thức ăn / đồ uống phục vụ tại rạp"
+                    obj.has("description") && obj.optString("description").isNotBlank() -> obj.optString("description")
+                    obj.has("mo_ta") && obj.optString("mo_ta").isNotBlank() -> obj.optString("mo_ta")
+                    obj.has("desc") && obj.optString("desc").isNotBlank() -> obj.optString("desc")
+                    obj.has("details") && obj.optString("details").isNotBlank() -> obj.optString("details")
+                    obj.has("info") && obj.optString("info").isNotBlank() -> obj.optString("info")
+                    else -> if (type == "combo") "Bắp rang bơ giòn rụm + nước ngọt mát lạnh" else "Thức ăn / đồ uống hảo hạng phục vụ tại rạp"
                 }
                 list.add(Product(id, name, price, imageUrl, desc, type))
             }
@@ -929,11 +951,19 @@ object SupabaseSyncService {
                             val vPercent = if (obj.has("vip_percent") && !obj.isNull("vip_percent")) obj.optDouble("vip_percent") else null
                             val pr = if (obj.has("price") && !obj.isNull("price")) obj.optInt("price") else (regPrice?.toInt() ?: 0)
 
+                            val mTitle = when {
+                                obj.has("movie_title") -> obj.optString("movie_title")
+                                obj.has("movieTitle") -> obj.optString("movieTitle")
+                                obj.has("title") -> obj.optString("title")
+                                else -> ""
+                            }
+
                             list.add(
                                 Showtime(
                                     id = obj.optInt("id", i + 1),
                                     movieId = mId,
                                     movieStringId = mIdStr,
+                                    movieTitle = mTitle,
                                     startTime = sTime,
                                     endTime = eTime,
                                     price = pr,
@@ -991,7 +1021,16 @@ object SupabaseSyncService {
                         val jsonArray = JSONArray(bodyString)
                         for (i in 0 until jsonArray.length()) {
                             val obj = jsonArray.getJSONObject(i)
-                            val seatsVal = obj.optString("seats", "")
+                            val seatsVal = when {
+                                obj.has("seats") && obj.optString("seats").isNotBlank() -> obj.optString("seats")
+                                obj.has("seat_code") && obj.optString("seat_code").isNotBlank() -> obj.optString("seat_code")
+                                obj.has("seat_codes") && obj.optString("seat_codes").isNotBlank() -> obj.optString("seat_codes")
+                                obj.has("selected_seats") && obj.optString("selected_seats").isNotBlank() -> obj.optString("selected_seats")
+                                obj.has("seat") && obj.optString("seat").isNotBlank() -> obj.optString("seat")
+                                obj.has("seat_id") && obj.optString("seat_id").isNotBlank() -> obj.optString("seat_id")
+                                obj.has("seat_number") && obj.optString("seat_number").isNotBlank() -> obj.optString("seat_number")
+                                else -> obj.optString("seats", "")
+                            }
                             val idVal = obj.opt("id")
                             val intId = when (idVal) {
                                 is Int -> idVal

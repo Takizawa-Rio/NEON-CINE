@@ -2125,8 +2125,12 @@ fun BookingFlowScreen(
                                         }
 
                                         val seatId = seatItem.code.ifEmpty { "$rowName${seatItem.col}" }
-                                        val isSelected = selectedSeats.contains(seatId)
-                                        val isBooked = bookedSeats.contains(seatId)
+                                        val isBooked = viewModel.isSeatBooked(seatId) || 
+                                                bookedSeats.contains(seatId) || 
+                                                (seatItem.code.isNotEmpty() && (bookedSeats.contains(seatItem.code) || viewModel.isSeatBooked(seatItem.code))) || 
+                                                bookedSeats.contains("$rowName${seatItem.col}") ||
+                                                bookedSeats.contains("$rowName${seatItem.col.toString().padStart(2, '0')}")
+                                        val isSelected = !isBooked && selectedSeats.contains(seatId)
                                         val isVIP = seatItem.type.equals("VIP", ignoreCase = true)
                                         val isCouple = seatItem.type.equals("COUPLE", ignoreCase = true) || seatItem.type.equals("SWEETBOX", ignoreCase = true)
 
@@ -2231,8 +2235,11 @@ fun BookingFlowScreen(
                                         }
 
                                         val seatId = "$row$col"
-                                        val isSelected = selectedSeats.contains(seatId)
-                                        val isBooked = bookedSeats.contains(seatId)
+                                        val isBooked = viewModel.isSeatBooked(seatId) || 
+                                                bookedSeats.contains(seatId) || 
+                                                bookedSeats.contains("$row${col.toString().padStart(2, '0')}") ||
+                                                viewModel.isSeatBooked("$row${col.toString().padStart(2, '0')}")
+                                        val isSelected = !isBooked && selectedSeats.contains(seatId)
                                         val isVIP = row in listOf("E", "F", "G", "H", "I") || (rowCount <= 6 && row in listOf("C", "D", "E"))
                                         val isCouple = row == "J" || (rowCount > 2 && row == dynamicRows.last())
 
@@ -3516,6 +3523,58 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
+                    // Booking Code highlighted badge
+                    val displayBookingCode = ticket.bookingCode.ifEmpty { ticket.barcode.replace("NEON-", "").take(5).uppercase() }
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MomoPrimary.copy(alpha = 0.1f)),
+                        border = BorderStroke(1.dp, MomoPrimary.copy(alpha = 0.35f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "MÃ ĐẶT VÉ (BOOKING CODE)",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = displayBookingCode,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MomoPrimary,
+                                    letterSpacing = 2.sp
+                                )
+                            }
+                            val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+                            FilledTonalButton(
+                                onClick = {
+                                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(displayBookingCode))
+                                },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.ContentCopy,
+                                    contentDescription = "Sao chép",
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Sao chép", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
                     // Seat details
                     Row(
                         modifier = Modifier
@@ -3788,7 +3847,47 @@ fun TicketHistoryItem(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Booking code tag
+            val itemBookingCode = ticket.bookingCode.ifEmpty { ticket.barcode.replace("NEON-", "").take(5).uppercase() }
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MomoPrimary.copy(alpha = 0.08f),
+                border = BorderStroke(1.dp, MomoPrimary.copy(alpha = 0.25f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "MÃ ĐẶT VÉ: ",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = itemBookingCode,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MomoPrimary,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                    Text(
+                        text = "• ĐÃ THANH TOÁN",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF4CAF50)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Simulated Barcode with Ticket Code
             Column(
