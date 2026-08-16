@@ -625,7 +625,7 @@ object SupabaseSyncService {
     fun fetchProductsFromSupabase(onResult: (List<Product>) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) return
         fetchProductsFromTables(
-            tables = listOf("products", "combos", "popcorns", "food_and_drinks", "food", "foods", "concessions", "items", "snacks"),
+            tables = listOf("products", "combos", "combo", "popcorns", "popcorn", "food_and_drinks", "food_and_drink", "food", "foods", "concessions", "items", "snacks", "menu", "san_pham", "bap_nuoc", "thuc_an", "drinks", "beverages", "product"),
             index = 0,
             onResult = onResult
         )
@@ -950,27 +950,43 @@ object SupabaseSyncService {
                                 else -> 0
                             }
                             var sTime = when {
-                                obj.has("start_time") -> obj.optString("start_time")
-                                obj.has("startTime") -> obj.optString("startTime")
+                                obj.has("start_time") && obj.optString("start_time").isNotBlank() -> obj.optString("start_time")
+                                obj.has("startTime") && obj.optString("startTime").isNotBlank() -> obj.optString("startTime")
+                                obj.has("time") && obj.optString("time").isNotBlank() -> obj.optString("time")
+                                obj.has("gio_chieu") && obj.optString("gio_chieu").isNotBlank() -> obj.optString("gio_chieu")
+                                obj.has("khung_gio") && obj.optString("khung_gio").isNotBlank() -> obj.optString("khung_gio")
+                                obj.has("suat_chieu") && obj.optString("suat_chieu").isNotBlank() -> obj.optString("suat_chieu")
+                                obj.has("gio_bat_dau") && obj.optString("gio_bat_dau").isNotBlank() -> obj.optString("gio_bat_dau")
+                                obj.has("time_slot") && obj.optString("time_slot").isNotBlank() -> obj.optString("time_slot")
                                 else -> ""
                             }
-                            if (sTime.length >= 5 && sTime.contains(":")) {
+                            if (sTime.contains("T")) {
+                                val tPart = sTime.substringAfter("T").substringBefore("+").substringBefore("Z").trim()
+                                if (tPart.length >= 5) sTime = tPart.substring(0, 5)
+                            } else if (sTime.length >= 5 && sTime.contains(":")) {
                                 sTime = sTime.substring(0, 5) // Lấy HH:mm bỏ phần :ss nếu có
                             }
 
                             var eTime = when {
-                                obj.has("end_time") -> obj.optString("end_time")
-                                obj.has("endTime") -> obj.optString("endTime")
+                                obj.has("end_time") && obj.optString("end_time").isNotBlank() -> obj.optString("end_time")
+                                obj.has("endTime") && obj.optString("endTime").isNotBlank() -> obj.optString("endTime")
+                                obj.has("gio_ket_thuc") && obj.optString("gio_ket_thuc").isNotBlank() -> obj.optString("gio_ket_thuc")
                                 else -> ""
                             }
-                            if (eTime.length >= 5 && eTime.contains(":")) {
+                            if (eTime.contains("T")) {
+                                val tPart = eTime.substringAfter("T").substringBefore("+").substringBefore("Z").trim()
+                                if (tPart.length >= 5) eTime = tPart.substring(0, 5)
+                            } else if (eTime.length >= 5 && eTime.contains(":")) {
                                 eTime = eTime.substring(0, 5)
                             }
 
                             var sDate = when {
-                                obj.has("show_date") -> obj.optString("show_date")
-                                obj.has("showDate") -> obj.optString("showDate")
-                                obj.has("date") -> obj.optString("date")
+                                obj.has("show_date") && obj.optString("show_date").isNotBlank() -> obj.optString("show_date")
+                                obj.has("showDate") && obj.optString("showDate").isNotBlank() -> obj.optString("showDate")
+                                obj.has("date") && obj.optString("date").isNotBlank() -> obj.optString("date")
+                                obj.has("ngay_chieu") && obj.optString("ngay_chieu").isNotBlank() -> obj.optString("ngay_chieu")
+                                obj.has("ngay") && obj.optString("ngay").isNotBlank() -> obj.optString("ngay")
+                                obj.has("screening_date") && obj.optString("screening_date").isNotBlank() -> obj.optString("screening_date")
                                 else -> ""
                             }
                             // Nếu show_date là YYYY-MM-DD hoặc ISO timestamp chuyển thành dd/MM để khớp với UI

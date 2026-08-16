@@ -128,6 +128,10 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     private val _aiAnalysisState = MutableStateFlow<AIAnalysisState>(AIAnalysisState.Idle)
     val aiAnalysisState: StateFlow<AIAnalysisState> = _aiAnalysisState.asStateFlow()
 
+    // Vé vừa được tạo gần nhất (hiển thị mã booking code tức thì sau khi thanh toán)
+    private val _lastCreatedTicket = MutableStateFlow<Ticket?>(null)
+    val lastCreatedTicket: StateFlow<Ticket?> = _lastCreatedTicket.asStateFlow()
+
     // Trình chọn tab chính (0: Mua vé, 1: Lịch chiếu, 2: Vé của tôi, 3: Tôi)
     private val _currentTab = MutableStateFlow(0)
     val currentTab: StateFlow<Int> = _currentTab.asStateFlow()
@@ -1431,6 +1435,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             userName = _userName.value,
             promoCode = promoToMarkUsed?.code ?: ""
         )
+        _lastCreatedTicket.value = ticket
 
         viewModelScope.launch {
             repository.bookTicket(ticket)
