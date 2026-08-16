@@ -20,6 +20,12 @@ interface CinemaDao {
     @Query("SELECT * FROM tickets ORDER BY timestamp DESC")
     fun getAllTickets(): Flow<List<Ticket>>
 
+    @Query("SELECT COUNT(*) FROM tickets")
+    suspend fun getTicketCount(): Int
+
+    @Query("SELECT * FROM tickets WHERE barcode = :barcode LIMIT 1")
+    suspend fun getTicketByBarcode(barcode: String): Ticket?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTicket(ticket: Ticket)
 

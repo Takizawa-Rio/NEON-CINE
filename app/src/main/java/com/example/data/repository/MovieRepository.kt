@@ -279,8 +279,20 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
         com.example.data.supabase.SupabaseSyncService.fetchTicketsFromSupabase { remoteTickets ->
             if (remoteTickets.isNotEmpty()) {
                 CoroutineScope(Dispatchers.IO).launch {
-                    for (ticket in remoteTickets) {
-                        cinemaDao.insertTicket(ticket)
+                    val count = cinemaDao.getTicketCount()
+                    if (count == 0) {
+                        for (ticket in remoteTickets) {
+                            cinemaDao.insertTicket(ticket)
+                        }
+                    } else {
+                        for (ticket in remoteTickets) {
+                            if (ticket.barcode.isNotBlank()) {
+                                val existing = cinemaDao.getTicketByBarcode(ticket.barcode)
+                                if (existing == null) {
+                                    cinemaDao.insertTicket(ticket)
+                                }
+                            }
+                        }
                     }
                 }
             }

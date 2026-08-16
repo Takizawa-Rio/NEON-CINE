@@ -3055,13 +3055,10 @@ fun BookingFlowScreen(
                                                 .background(Color.White, RoundedCornerShape(8.dp))
                                                 .clickable {
                                                     isProcessingPayment = true
-                                                    val timer = Timer()
-                                                    timer.schedule(object : TimerTask() {
-                                                        override fun run() {
-                                                            isProcessingPayment = false
-                                                            showSuccessAnimation = true
-                                                        }
-                                                    }, 1200)
+                                                    viewModel.purchaseTicket {
+                                                        isProcessingPayment = false
+                                                        showSuccessAnimation = true
+                                                    }
                                                 }
                                                 .padding(6.dp),
                                             contentAlignment = Alignment.Center
@@ -3126,14 +3123,10 @@ fun BookingFlowScreen(
                                 Button(
                                     onClick = {
                                         isProcessingPayment = true
-                                        // Simulate mock payment processing of 1.5s
-                                        val timer = Timer()
-                                        timer.schedule(object : TimerTask() {
-                                            override fun run() {
-                                                isProcessingPayment = false
-                                                showSuccessAnimation = true
-                                            }
-                                        }, 1500)
+                                        viewModel.purchaseTicket {
+                                            isProcessingPayment = false
+                                            showSuccessAnimation = true
+                                        }
                                     },
                                     enabled = if (paymentMethod == "card") cardNumber.isNotBlank() && cardHolder.isNotBlank() else true,
                                     colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary),
@@ -3191,10 +3184,9 @@ fun BookingFlowScreen(
 
                                 Button(
                                     onClick = {
-                                        viewModel.purchaseTicket {
-                                            showPaymentConfirm = false
-                                            showSuccessAnimation = false
-                                        }
+                                        showPaymentConfirm = false
+                                        showSuccessAnimation = false
+                                        viewModel.closeBookingFlowAndGoToTickets()
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary),
                                     modifier = Modifier
@@ -3220,8 +3212,9 @@ fun TicketsScreen(viewModel: MovieViewModel) {
     val tickets by viewModel.tickets.collectAsStateWithLifecycle()
     val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
 
-    val myTickets = remember(tickets, userEmail) {
-        tickets.filter { it.userEmail.isBlank() || it.userEmail == userEmail }
+    // Hiển thị đầy đủ tất cả vé đã đặt trên thiết bị, không ẩn hay lọc mất vé cũ
+    val myTickets = remember(tickets, userEmail, isLoggedIn) {
+        if (tickets.isNotEmpty()) tickets else emptyList()
     }
 
     var selectedTicketForEnlarge by remember { mutableStateOf<Ticket?>(null) }
@@ -3241,7 +3234,7 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                 .padding(vertical = 12.dp, horizontal = 16.dp),
         ) {
             Text(
-                text = "Lịch Sử Vé Đã Đặt 🎟️",
+                text = "Lịch Sử Vé Đã Đặt (${myTickets.size}) 🎟️",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
@@ -3252,7 +3245,7 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                 modifier = Modifier.align(Alignment.CenterEnd),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isLoggedIn && myTickets.isNotEmpty()) {
+                if (myTickets.isNotEmpty()) {
                     IconButton(
                         onClick = { showClearAllConfirmDialog = true },
                         modifier = Modifier.testTag("clear_all_tickets_button")
@@ -3278,44 +3271,35 @@ fun TicketsScreen(viewModel: MovieViewModel) {
             }
         }
 
-        if (!isLoggedIn) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+        if (!isLoggedIn && myTickets.isNotEmpty()) {
+            Surface(
+                color = MomoPrimary.copy(alpha = 0.12f),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Lock,
-                    contentDescription = "Yêu cầu đăng nhập",
-                    tint = MomoPrimary,
-                    modifier = Modifier.size(80.dp)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Yêu Cầu Đăng Nhập",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Vui lòng đăng nhập tài khoản thành viên để quản lý và xem lại các vé xem phim đã mua của bạn.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                Button(
-                    onClick = { viewModel.selectTab(4) },
-                    colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("Đăng Nhập Ngay ⚡", color = Color.White)
+                    Text(
+                        text = "💡 Đăng nhập để tích lũy điểm thưởng Neon Club",
+                        fontSize = 12.sp,
+                        color = MomoPrimary,
+                        fontWeight = FontWeight.Medium
+                    )
+                    TextButton(
+                        onClick = { viewModel.selectTab(4) },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Đăng nhập", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MomoPrimary)
+                    }
                 }
             }
-        } else if (myTickets.isEmpty()) {
+        }
+
+        if (myTickets.isEmpty()) {
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -3349,7 +3333,7 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                     onClick = { viewModel.selectTab(0) },
                     colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary)
                 ) {
-                    Text("Đặt Vé Ngay")
+                    Text("Đặt Vé Ngay", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             }
         } else {
@@ -3360,7 +3344,7 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(myTickets) { ticket ->
+                items(myTickets, key = { it.id.toString() + "_" + it.barcode }) { ticket ->
                     TicketHistoryItem(
                         ticket = ticket,
                         viewModel = viewModel,
@@ -3482,13 +3466,24 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     
+                    val displayTitle = if (ticket.movieTitle.isNotBlank() && ticket.movieTitle != "Phim") {
+                        ticket.movieTitle
+                    } else {
+                        viewModel.movies.value.find { it.id == ticket.movieId }?.title ?: "Phim Chiếu Rạp"
+                    }
+                    val displayPoster = if (ticket.moviePoster.isNotBlank()) {
+                        ticket.moviePoster
+                    } else {
+                        viewModel.movies.value.find { it.id == ticket.movieId }?.posterUrl ?: "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&auto=format&fit=crop"
+                    }
+
                     // Movie details row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         AsyncImage(
-                            model = ticket.moviePoster,
+                            model = displayPoster,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
@@ -3499,11 +3494,11 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = ticket.movieTitle,
+                                text = displayTitle,
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Spacer(modifier = Modifier.height(2.dp))
@@ -3752,6 +3747,17 @@ fun TicketHistoryItem(
     onTicketClick: (Ticket) -> Unit,
     onDeleteClick: (Ticket) -> Unit
 ) {
+    val displayTitle = if (ticket.movieTitle.isNotBlank() && ticket.movieTitle != "Phim") {
+        ticket.movieTitle
+    } else {
+        viewModel.movies.value.find { it.id == ticket.movieId }?.title ?: "Phim Chiếu Rạp"
+    }
+    val displayPoster = if (ticket.moviePoster.isNotBlank()) {
+        ticket.moviePoster
+    } else {
+        viewModel.movies.value.find { it.id == ticket.movieId }?.posterUrl ?: "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&auto=format&fit=crop"
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -3772,7 +3778,7 @@ fun TicketHistoryItem(
             ) {
                 // Ticket Poster image
                 AsyncImage(
-                    model = ticket.moviePoster,
+                    model = displayPoster,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -3783,10 +3789,12 @@ fun TicketHistoryItem(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = ticket.movieTitle,
+                        text = displayTitle,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(

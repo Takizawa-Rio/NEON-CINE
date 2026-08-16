@@ -237,6 +237,31 @@ object SupabaseSyncService {
                     obj.has("movie_id") -> obj.optInt("movie_id", 0)
                     else -> 0
                 }
+                val rawTitle = when {
+                    obj.has("movie_title") && obj.optString("movie_title").isNotBlank() -> obj.optString("movie_title")
+                    obj.has("movieTitle") && obj.optString("movieTitle").isNotBlank() -> obj.optString("movieTitle")
+                    obj.has("title") && obj.optString("title").isNotBlank() -> obj.optString("title")
+                    else -> ""
+                }
+                val resolvedTitle = if (rawTitle.isNotBlank() && rawTitle != "Phim") {
+                    rawTitle
+                } else {
+                    when (mId) {
+                        1 -> "Lật Mặt 7: Một Điều Ước"
+                        2 -> "Mai"
+                        3 -> "Doraemon: Bản Tình Ca Đất Nước"
+                        4 -> "Inside Out 2 (Những Mảnh Ghép Cảm Xúc 2)"
+                        5 -> "Deadpool & Wolverine"
+                        6 -> "Godzilla x Kong: Đế Chế Mới"
+                        7 -> "Kẻ Trộm Mặt Trăng 4 (Despicable Me 4)"
+                        8 -> "Hành Tinh Cát: Phần Hai (Dune: Part Two)"
+                        9 -> "Kung Fu Panda 4"
+                        10 -> "Mufasa: The Lion King"
+                        11 -> "Moana 2 (Hành Trình Của Moana 2)"
+                        12 -> "Sonic the Hedgehog 3"
+                        else -> if (rawTitle.isNotBlank()) rawTitle else "Phim Chiếu Rạp"
+                    }
+                }
                 val seatVal = when {
                     obj.has("seats") && obj.optString("seats").isNotBlank() -> obj.optString("seats")
                     obj.has("seat_code") && obj.optString("seat_code").isNotBlank() -> obj.optString("seat_code")
@@ -246,25 +271,42 @@ object SupabaseSyncService {
                     obj.has("seat_name") && obj.optString("seat_name").isNotBlank() -> obj.optString("seat_name")
                     obj.has("seat_codes") && obj.optString("seat_codes").isNotBlank() -> obj.optString("seat_codes")
                     obj.has("selected_seats") && obj.optString("selected_seats").isNotBlank() -> obj.optString("selected_seats")
-                    else -> obj.optString("seats", obj.optString("seat_code", ""))
+                    else -> obj.optString("seats", obj.optString("seat_code", "Ghế"))
                 }
+                val posterVal = when {
+                    obj.has("movie_poster") && obj.optString("movie_poster").isNotBlank() -> obj.optString("movie_poster")
+                    obj.has("moviePoster") && obj.optString("moviePoster").isNotBlank() -> obj.optString("moviePoster")
+                    obj.has("posterUrl") && obj.optString("posterUrl").isNotBlank() -> obj.optString("posterUrl")
+                    else -> when (mId) {
+                        1 -> "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&auto=format&fit=crop"
+                        2 -> "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=500&auto=format&fit=crop"
+                        3 -> "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=500&auto=format&fit=crop"
+                        4 -> "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop"
+                        else -> "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop"
+                    }
+                }
+                val rawBarcode = obj.optString("barcode", "")
+                val barcode = if (rawBarcode.isNotBlank()) rawBarcode else "NEON-${System.currentTimeMillis() % 100000}"
+                val bCode = obj.optString("booking_code", obj.optString("bookingCode", obj.optString("ticket_code", "")))
+                val bookingCode = if (bCode.isNotBlank()) bCode else barcode.replace("NEON-", "").take(5).uppercase(Locale.getDefault())
+
                 list.add(
                     Ticket(
-                        id = obj.optInt("id", i + 1),
+                        id = 0, // Dùng 0 để Room tự sinh auto-increment ID tránh đè ID vé địa phương
                         movieId = mId,
-                        movieTitle = obj.optString("movie_title", obj.optString("movieTitle", "Phim")),
-                        moviePoster = obj.optString("movie_poster", obj.optString("moviePoster", "")),
-                        cinema = obj.optString("cinema", "Neon Cine Space"),
-                        dateTime = obj.optString("date_time", obj.optString("dateTime", "")),
+                        movieTitle = resolvedTitle,
+                        moviePoster = posterVal,
+                        cinema = obj.optString("cinema", "Neon Cine Space - Vincom"),
+                        dateTime = obj.optString("date_time", obj.optString("dateTime", "Hôm nay")),
                         seats = seatVal,
                         totalPrice = obj.optInt("total_price", obj.optInt("price", 0)),
                         combo = obj.optString("combo", ""),
-                        barcode = obj.optString("barcode", "NEON-${System.currentTimeMillis() % 100000}"),
+                        barcode = barcode,
                         timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
                         userEmail = obj.optString("user_email", obj.optString("userEmail", "")),
                         userName = obj.optString("user_name", obj.optString("userName", "")),
                         promoCode = obj.optString("promo_code", obj.optString("promoCode", "")),
-                        bookingCode = obj.optString("booking_code", obj.optString("bookingCode", obj.optString("ticket_code", "")))
+                        bookingCode = bookingCode
                     )
                 )
             }

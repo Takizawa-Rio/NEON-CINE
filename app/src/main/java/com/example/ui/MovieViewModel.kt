@@ -1439,18 +1439,21 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
                 message = "Vé phim ${movie.title} tại ${_selectedCinema.value}, suất ${_selectedDate.value} lúc ${_selectedTime.value}. Ghế chọn: $seatsStr. Mã đặt vé: $bookingCode (Mã vạch: $barcode)",
                 type = "booking"
             )
+            loadShowtimesAndBookingsFromSupabase()
             onSuccess()
-            // Reset trạng thái đặt vé
-            _selectedSeats.value = emptySet()
-            _selectedProductsMap.value = emptyMap()
-            _comboCount.value = 0
-            _redeemedComboCount.value = 0
-            _promoDiscount.value = 0
-            _appliedPromoCode.value = null
-            _isBookingFlowActive.value = false
-            _selectedMovie.value = null
-            _currentTab.value = 3 // Chuyển sang tab "Vé của tôi" (tab số 3) để xem vé vừa đặt!
         }
+    }
+
+    fun closeBookingFlowAndGoToTickets() {
+        _selectedSeats.value = emptySet()
+        _selectedProductsMap.value = emptyMap()
+        _comboCount.value = 0
+        _redeemedComboCount.value = 0
+        _promoDiscount.value = 0
+        _appliedPromoCode.value = null
+        _isBookingFlowActive.value = false
+        _selectedMovie.value = null
+        _currentTab.value = 3 // Chuyển sang tab "Vé của tôi" (tab số 3) để xem vé vừa đặt!
     }
 
     // Xóa một vé cụ thể
