@@ -26,6 +26,7 @@ class MovieApplication : Application(), ImageLoaderFactory {
             .networkCachePolicy(CachePolicy.ENABLED)
             .crossfade(true)
             .respectCacheHeaders(false)
+            .allowHardware(true)
             .build()
     }
 }

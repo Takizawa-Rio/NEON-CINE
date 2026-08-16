@@ -1073,7 +1073,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         val movie = _selectedMovie.value
         val slots = if (movie != null) {
             val movieTimes = _showtimes.value.filter {
-                (it.movieId == movie.id || (movie.stringId.isNotEmpty() && (it.movieStringId == movie.stringId || it.movieStringId == "FILM_${movie.id}" || it.movieStringId == "${movie.id}"))) &&
+                (it.movieId == movie.id || (movie.stringId.isNotEmpty() && (it.movieStringId == movie.stringId || it.movieStringId == "FILM_${movie.id}" || it.movieStringId == "${movie.id}")) || (it.movieTitle.isNotBlank() && (it.movieTitle.equals(movie.title, ignoreCase = true) || it.movieTitle.contains(movie.title, ignoreCase = true) || movie.title.contains(it.movieTitle, ignoreCase = true)))) &&
                 (date.isBlank() || it.date.isBlank() || it.date == date || isDateMatch(it.date, date))
             }.map { it.startTime }.filter { it.isNotBlank() }.distinct().sorted()
             if (movieTimes.isNotEmpty()) movieTimes else defaultShowtimeSlots

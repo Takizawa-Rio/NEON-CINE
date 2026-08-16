@@ -1789,6 +1789,7 @@ fun BookingFlowScreen(
     val isPromoCodeUsed by viewModel.isPromoCodeUsed.collectAsStateWithLifecycle()
 
     val promoCodes by viewModel.promoCodes.collectAsStateWithLifecycle()
+    val lastCreatedTicket by viewModel.lastCreatedTicket.collectAsStateWithLifecycle()
     var promoInputText by remember { mutableStateOf("") }
     var promoErrorMsg by remember { mutableStateOf<String?>(null) }
 
@@ -3145,16 +3146,21 @@ fun BookingFlowScreen(
                             }
                         } else {
                             // SUCCESS PAYMENT STATE
+                            val currentCreatedTicket = lastCreatedTicket
+                            val displayCode = currentCreatedTicket?.bookingCode?.ifEmpty { null }
+                                ?: currentCreatedTicket?.barcode?.replace("NEON-", "")?.take(5)?.uppercase()
+                                ?: "BK-${System.currentTimeMillis().toString().takeLast(5)}"
+
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 32.dp),
+                                    .padding(vertical = 16.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(72.dp)
+                                        .size(64.dp)
                                         .clip(CircleShape)
                                         .background(Color(0xFFE8F5E9)),
                                     contentAlignment = Alignment.Center
@@ -3163,24 +3169,118 @@ fun BookingFlowScreen(
                                         imageVector = Icons.Rounded.Check,
                                         contentDescription = "Thành công",
                                         tint = Color(0xFF388E3C),
-                                        modifier = Modifier.size(48.dp)
+                                        modifier = Modifier.size(42.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(20.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = "Thanh Toán Thành Công!",
+                                    text = "Thanh Toán Thành Công! 🎉",
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF388E3C)
                                 )
                                 Text(
-                                    text = "Mã vé đã được ghi nhận trong lịch sử giao dịch",
+                                    text = "Vé của bạn đã được lưu vào hệ thống và CSDL",
                                     fontSize = 12.sp,
                                     color = Color.Gray,
-                                    modifier = Modifier.padding(top = 4.dp)
+                                    modifier = Modifier.padding(top = 2.dp)
                                 )
 
-                                Spacer(modifier = Modifier.height(24.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Booking Code Highlight Box
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = MomoPrimary.copy(alpha = 0.08f)),
+                                    border = BorderStroke(1.5.dp, MomoPrimary.copy(alpha = 0.4f)),
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(14.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = "MÃ ĐẶT VÉ (BOOKING CODE)",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = displayCode,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 22.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = MomoPrimary,
+                                            letterSpacing = 2.sp
+                                        )
+
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        HorizontalDivider(color = MomoPrimary.copy(alpha = 0.2f))
+                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Phim:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(
+                                                text = currentCreatedTicket?.movieTitle ?: movie?.title ?: "Phim",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.widthIn(max = 180.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Suất chiếu:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(
+                                                text = "${currentCreatedTicket?.dateTime ?: "$date | $time"}",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Ghế ngồi:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(
+                                                text = currentCreatedTicket?.seats ?: selectedSeats.sorted().joinToString(", "),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MomoPrimary
+                                            )
+                                        }
+                                        val productsSummary = viewModel.getProductsSummary()
+                                        val comboText = currentCreatedTicket?.combo?.ifBlank { null } ?: productsSummary.ifBlank { null }
+                                        if (!comboText.isNullOrBlank()) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("Combo bắp nước:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Text(
+                                                    text = comboText,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(20.dp))
 
                                 Button(
                                     onClick = {
@@ -3190,12 +3290,12 @@ fun BookingFlowScreen(
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary),
                                     modifier = Modifier
-                                        .fillMaxWidth(0.8f)
-                                        .height(44.dp)
+                                        .fillMaxWidth()
+                                        .height(48.dp)
                                         .testTag("go_to_tickets_button"),
-                                    shape = RoundedCornerShape(22.dp)
+                                    shape = RoundedCornerShape(24.dp)
                                 ) {
-                                    Text("Xem Vé Của Tôi", fontWeight = FontWeight.Bold)
+                                    Text("Xem Vé Của Tôi 🎟️", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                 }
                             }
                         }
