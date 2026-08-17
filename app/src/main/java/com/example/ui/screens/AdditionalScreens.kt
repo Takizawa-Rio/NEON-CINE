@@ -36,6 +36,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import com.example.ui.MovieViewModel
 import com.example.ui.theme.*
@@ -557,6 +560,8 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
 
     var showNotificationDialog by remember { mutableStateOf(false) }
     var showAvatarDialog by remember { mutableStateOf(false) }
+    var showSupportDialog by remember { mutableStateOf(false) }
+    var showPolicyDialog by remember { mutableStateOf(false) }
     var customUrlInput by remember { mutableStateOf("") }
     var showUrlInputDialog by remember { mutableStateOf(false) }
 
@@ -715,6 +720,20 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
                         title = "Lịch Sử Đặt Vé",
                         subtitle = "Chi tiết các vé xem phim đã thanh toán của bạn",
                         onClick = { viewModel.selectTab(3) } // Di chuyển đến tab vé
+                    )
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
+                    ProfileMenuRow(
+                        icon = Icons.Rounded.HeadsetMic,
+                        title = "Liên Hệ & Hỗ Trợ Khách Hàng",
+                        subtitle = "Hotline 24/7, Gửi phản hồi sự cố & Câu hỏi thường gặp (FAQ)",
+                        onClick = { showSupportDialog = true }
+                    )
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
+                    ProfileMenuRow(
+                        icon = Icons.Rounded.Policy,
+                        title = "Điều Khoản & Chính Sách Rạp",
+                        subtitle = "Bảo mật, Quy định đổi trả vé & Quy định độ tuổi xem phim",
+                        onClick = { showPolicyDialog = true }
                     )
                 }
             }
@@ -1141,6 +1160,27 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
             }
         }
     }
+
+    // Dialog Liên hệ & Hỗ trợ khách hàng
+    if (showSupportDialog) {
+        SupportContactDialog(
+            onDismiss = { showSupportDialog = false },
+            onSendFeedback = { topic, message ->
+                viewModel.addNotification(
+                    title = "📩 Đã gửi yêu cầu hỗ trợ",
+                    message = "Chủ đề: $topic. Cảm ơn bạn, bộ phận CSKH Neon Cine sẽ phản hồi trong thời gian sớm nhất.",
+                    type = "general"
+                )
+            }
+        )
+    }
+
+    // Dialog Điều khoản & Chính sách rạp
+    if (showPolicyDialog) {
+        PoliciesTermsDialog(
+            onDismiss = { showPolicyDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -1202,6 +1242,8 @@ fun AuthFormView(viewModel: MovieViewModel) {
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf("") }
+    var showSupportDialog by remember { mutableStateOf(false) }
+    var showPolicyDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -1419,8 +1461,76 @@ fun AuthFormView(viewModel: MovieViewModel) {
                         fontSize = 15.sp
                     )
                 }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Liên kết hỗ trợ & chính sách cho khách truy cập
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { showSupportDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.HeadsetMic,
+                            contentDescription = null,
+                            tint = NeonPrimary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Liên hệ hỗ trợ",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = NeonPrimary
+                        )
+                    }
+
+                    Text(
+                        text = "•",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+
+                    TextButton(onClick = { showPolicyDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.Policy,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Chính sách & Quy định",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
+    }
+
+    // Dialog Liên hệ & Hỗ trợ
+    if (showSupportDialog) {
+        SupportContactDialog(
+            onDismiss = { showSupportDialog = false },
+            onSendFeedback = { topic, message ->
+                viewModel.addNotification(
+                    title = "📩 Đã gửi yêu cầu hỗ trợ",
+                    message = "Chủ đề: $topic. Bộ phận CSKH sẽ hỗ trợ bạn sớm nhất.",
+                    type = "general"
+                )
+            }
+        )
+    }
+
+    // Dialog Chính sách & Quy định
+    if (showPolicyDialog) {
+        PoliciesTermsDialog(
+            onDismiss = { showPolicyDialog = false }
+        )
     }
 }
 
@@ -1877,6 +1987,941 @@ fun MovieDirectoryItem(
                 }
             }
         }
+    }
+}
+
+/**
+ * 7. Dialog Liên Hệ & Hỗ Trợ Khách Hàng (Support & Contact Dialog)
+ */
+@Composable
+fun SupportContactDialog(
+    onDismiss: () -> Unit,
+    onSendFeedback: (topic: String, message: String) -> Unit
+) {
+    val context = LocalContext.current
+    var selectedTab by remember { mutableIntStateOf(0) }
+    
+    // Form state
+    var selectedTopic by remember { mutableStateOf("Sự cố đặt vé / xuất mã QR") }
+    var feedbackContent by remember { mutableStateOf("") }
+    var contactPhone by remember { mutableStateOf("") }
+    var feedbackSent by remember { mutableStateOf(false) }
+
+    val topics = remember {
+        listOf(
+            "Sự cố đặt vé / xuất mã QR",
+            "Yêu cầu đổi suất chiếu",
+            "Lỗi thanh toán MoMo / VNPAY",
+            "Tích điểm hội viên Neon Club",
+            "Góp ý chất lượng rạp & dịch vụ",
+            "Vấn đề khác"
+        )
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.88f),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(NeonPrimary.copy(alpha = 0.2f), NeonSecondary.copy(alpha = 0.1f))
+                            )
+                        )
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(NeonPrimary),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.HeadsetMic,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Hỗ Trợ Khách Hàng",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Tổng đài 24/7 & Giải đáp tức thì",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Đóng",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                // Tab Selector
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = NeonPrimary,
+                    divider = { Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)) }
+                ) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = { Text("Liên Hệ", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                        icon = { Icon(Icons.Rounded.PhoneInTalk, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = { Text("Gửi Yêu Cầu", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                        icon = { Icon(Icons.Rounded.RateReview, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                    )
+                    Tab(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        text = { Text("Hỏi Đáp FAQ", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                        icon = { Icon(Icons.Rounded.HelpOutline, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                    )
+                }
+
+                // Tab Content
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    when (selectedTab) {
+                        0 -> {
+                            // Tab 1: Liên hệ trực tiếp
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                item {
+                                    // Hotline Card
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                        shape = RoundedCornerShape(14.dp),
+                                        border = BorderStroke(1.dp, NeonPrimary.copy(alpha = 0.3f))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(46.dp)
+                                                    .clip(CircleShape)
+                                                    .background(NeonPrimary.copy(alpha = 0.15f)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Phone,
+                                                    contentDescription = null,
+                                                    tint = NeonPrimary,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "Hotline Tổng Đài 24/7",
+                                                    fontSize = 12.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = "1900 6868",
+                                                    fontSize = 18.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = NeonPrimary
+                                                )
+                                                Text(
+                                                    text = "Cước phí: 1.000đ/phút • Hoạt động 24/7",
+                                                    fontSize = 10.sp,
+                                                    color = Color.Gray
+                                                )
+                                            }
+                                            Button(
+                                                onClick = {
+                                                    try {
+                                                        val intent = Intent(Intent.ACTION_DIAL).apply {
+                                                            data = Uri.parse("tel:19006868")
+                                                        }
+                                                        context.startActivity(intent)
+                                                    } catch (e: Exception) {
+                                                        // Ignored
+                                                    }
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = NeonPrimary),
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                            ) {
+                                                Text("Gọi Ngay", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                item {
+                                    // Email Card
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                        shape = RoundedCornerShape(14.dp),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(46.dp)
+                                                    .clip(CircleShape)
+                                                    .background(NeonSecondary.copy(alpha = 0.15f)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Email,
+                                                    contentDescription = null,
+                                                    tint = NeonSecondary,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "Email Chăm Sóc Khách Hàng",
+                                                    fontSize = 12.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = "hotro@neoncine.vn",
+                                                    fontSize = 15.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    text = "Phản hồi trong vòng 30 phút",
+                                                    fontSize = 10.sp,
+                                                    color = Color.Gray
+                                                )
+                                            }
+                                            Button(
+                                                onClick = {
+                                                    try {
+                                                        val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                                            data = Uri.parse("mailto:hotro@neoncine.vn")
+                                                            putExtra(Intent.EXTRA_SUBJECT, "Yêu cầu hỗ trợ Neon Cine")
+                                                        }
+                                                        context.startActivity(intent)
+                                                    } catch (e: Exception) {
+                                                        // Ignored
+                                                    }
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = NeonSecondary),
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                            ) {
+                                                Text("Gửi Mail", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                item {
+                                    // Thông tin cụm rạp & trụ sở
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                        shape = RoundedCornerShape(14.dp),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Rounded.LocationOn, contentDescription = null, tint = MomoPrimary, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "Trụ Sở & Cụm Rạp Trung Tâm",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = "📍 Tòa nhà Neon Cine Tower, 123 Nguyễn Huệ, Quận 1, TP. Hồ Chí Minh\n📍 Neon Cine Center, 88 Cầu Giấy, Hà Nội\n📍 Neon Cine Plaza, 45 Nguyễn Văn Linh, Đà Nẵng",
+                                                fontSize = 11.sp,
+                                                lineHeight = 18.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+
+                                            Spacer(modifier = Modifier.height(12.dp))
+                                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                            Spacer(modifier = Modifier.height(10.dp))
+
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Rounded.AccessTime, contentDescription = null, tint = NeonPrimary, modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "Thời Gian Phục Vụ",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "• Mở cửa rạp: 08:00 - 01:00 (Sáng hôm sau)\n• Tổng đài hỗ trợ: 24/7 (Cả ngày Lễ & Tết)",
+                                                fontSize = 11.sp,
+                                                lineHeight = 17.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        1 -> {
+                            // Tab 2: Gửi phản hồi / Yêu cầu hỗ trợ
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                if (feedbackSent) {
+                                    item {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 32.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(64.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFF4CAF50)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Check,
+                                                    contentDescription = null,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(36.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Text(
+                                                text = "Gửi Yêu Cầu Thành Công!",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Text(
+                                                text = "Mã yêu cầu: #NC-${(1000..9999).random()}\nBộ phận CSKH Neon Cine đã tiếp nhận và sẽ phản hồi qua Hộp thư thông báo trong vòng 15-30 phút.",
+                                                fontSize = 12.sp,
+                                                textAlign = TextAlign.Center,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.height(20.dp))
+                                            Button(
+                                                onClick = {
+                                                    feedbackSent = false
+                                                    feedbackContent = ""
+                                                    contactPhone = ""
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = NeonPrimary),
+                                                shape = RoundedCornerShape(10.dp)
+                                            ) {
+                                                Text("Gửi Yêu Cầu Khác", color = Color.White, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    item {
+                                        Text(
+                                            text = "Chọn Chủ Đề Cần Hỗ Trợ",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                        // Topic chips
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            topics.chunked(2).forEach { rowTopics ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    rowTopics.forEach { topic ->
+                                                        val isSelected = selectedTopic == topic
+                                                        Surface(
+                                                            shape = RoundedCornerShape(8.dp),
+                                                            color = if (isSelected) NeonPrimary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                                            border = BorderStroke(1.dp, if (isSelected) NeonPrimary else Color.Transparent),
+                                                            modifier = Modifier
+                                                                .weight(1f)
+                                                                .clickable { selectedTopic = topic }
+                                                        ) {
+                                                            Text(
+                                                                text = topic,
+                                                                fontSize = 11.sp,
+                                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                                color = if (isSelected) NeonPrimary else MaterialTheme.colorScheme.onSurface,
+                                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                                                                textAlign = TextAlign.Center,
+                                                                maxLines = 2
+                                                            )
+                                                        }
+                                                    }
+                                                    if (rowTopics.size == 1) {
+                                                        Spacer(modifier = Modifier.weight(1f))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    item {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "Số Điện Thoại / Email Liên Hệ Lại",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        OutlinedTextField(
+                                            value = contactPhone,
+                                            onValueChange = { contactPhone = it },
+                                            placeholder = { Text("VD: 0912345678 hoặc email@example.com", fontSize = 12.sp) },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(10.dp)
+                                        )
+                                    }
+
+                                    item {
+                                        Text(
+                                            text = "Mô Tả Chi Tiết Vấn Đề",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        OutlinedTextField(
+                                            value = feedbackContent,
+                                            onValueChange = { feedbackContent = it },
+                                            placeholder = { Text("Vui lòng mô tả chi tiết sự cố bạn gặp phải, mã giao dịch, rạp chiếu hoặc góp ý của bạn...", fontSize = 12.sp) },
+                                            minLines = 3,
+                                            maxLines = 6,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(10.dp)
+                                        )
+                                    }
+
+                                    item {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Button(
+                                            onClick = {
+                                                if (feedbackContent.isNotBlank()) {
+                                                    onSendFeedback(selectedTopic, feedbackContent)
+                                                    feedbackSent = true
+                                                }
+                                            },
+                                            enabled = feedbackContent.isNotBlank(),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = NeonPrimary,
+                                                disabledContainerColor = Color.Gray.copy(alpha = 0.3f)
+                                            ),
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(46.dp)
+                                        ) {
+                                            Icon(Icons.Rounded.Send, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Gửi Yêu Cầu Hỗ Trợ", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        2 -> {
+                            // Tab 3: Câu hỏi thường gặp FAQ
+                            val faqs = remember {
+                                listOf(
+                                    "Tôi có thể đổi hoặc hủy vé sau khi đã thanh toán thành công không?" to
+                                            "Bạn có thể đổi sang suất chiếu khác trước giờ chiếu ít nhất 60 phút bằng cách gọi Hotline 1900 6868 hoặc liên hệ trực tiếp quầy vé tại rạp. Vé đã qua giờ chiếu sẽ không thể đổi hoặc hoàn tiền.",
+                                    "Làm thế nào để vào phòng chiếu khi đã đặt vé online?" to
+                                            "Sau khi thanh toán, vé điện tử có mã QR sẽ xuất hiện trong mục 'Vé Của Tôi'. Bạn chỉ cần mở mã QR này và quét trực tiếp tại cổng soát vé vào phòng chiếu mà không cần in vé giấy.",
+                                    "Tài khoản bị trừ tiền nhưng không nhận được vé thì xử lý sao?" to
+                                            "Trường hợp nghẽn mạng cổng thanh toán, hệ thống sẽ tự động đối soát trong vòng 10-15 phút. Bạn cũng có thể liên hệ ngay Hotline 1900 6868 hoặc gửi yêu cầu ở mục Hỗ Trợ kèm mã giao dịch để nhân viên kích hoạt vé hoặc hoàn tiền ngay.",
+                                    "Điểm Neon Club dùng để làm gì và có hạn sử dụng không?" to
+                                            "Điểm tích lũy Neon Club có thể dùng để đổi vé xem phim miễn phí (2D/3D), đổi bắp nước và nâng cấp ghế VIP. Điểm thưởng có giá trị trong vòng 12 tháng kể từ ngày giao dịch.",
+                                    "Khán giả dưới độ tuổi quy định có được vào xem phim giới hạn tuổi không?" to
+                                            "Theo quy định của Cục Điện ảnh, khán giả phải đủ độ tuổi theo nhãn phim (T13, T16, T18). Nhân viên soát vé có quyền yêu cầu xuất trình giấy tờ tùy thân (CCCD/VNeID/Thẻ học sinh) trước khi vào phòng chiếu."
+                                 )
+                            }
+
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                items(faqs) { (question, answer) ->
+                                    var isExpanded by remember { mutableStateOf(false) }
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { isExpanded = !isExpanded },
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isExpanded) NeonPrimary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                        ),
+                                        border = BorderStroke(1.dp, if (isExpanded) NeonPrimary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(14.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.weight(1f),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.Help,
+                                                        contentDescription = null,
+                                                        tint = NeonPrimary,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(
+                                                        text = question,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 12.sp,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                }
+                                                Icon(
+                                                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+
+                                            if (isExpanded) {
+                                                Spacer(modifier = Modifier.height(10.dp))
+                                                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text(
+                                                    text = answer,
+                                                    fontSize = 11.sp,
+                                                    lineHeight = 17.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Footer
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Đóng Trung Tâm Hỗ Trợ", fontWeight = FontWeight.Bold, color = NeonPrimary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 8. Dialog Điều Khoản & Chính Sách Rạp (Policies & Terms Dialog)
+ */
+@Composable
+fun PoliciesTermsDialog(
+    onDismiss: () -> Unit
+) {
+    var selectedPolicyTab by remember { mutableIntStateOf(0) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.88f),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(NeonSecondary.copy(alpha = 0.2f), NeonPrimary.copy(alpha = 0.1f))
+                            )
+                        )
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(NeonSecondary),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Policy,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Điều Khoản & Chính Sách",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Quy chế hoạt động cụm rạp Neon Cine",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Đóng",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                // Scrollable Tab Selector
+                ScrollableTabRow(
+                    selectedTabIndex = selectedPolicyTab,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = NeonSecondary,
+                    edgePadding = 12.dp,
+                    divider = { Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)) }
+                ) {
+                    Tab(
+                        selected = selectedPolicyTab == 0,
+                        onClick = { selectedPolicyTab = 0 },
+                        text = { Text("Điều Khoản Sử Dụng", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                    )
+                    Tab(
+                        selected = selectedPolicyTab == 1,
+                        onClick = { selectedPolicyTab = 1 },
+                        text = { Text("Chính Sách Bảo Mật", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                    )
+                    Tab(
+                        selected = selectedPolicyTab == 2,
+                        onClick = { selectedPolicyTab = 2 },
+                        text = { Text("Đổi Trả & Hoàn Vé", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                    )
+                    Tab(
+                        selected = selectedPolicyTab == 3,
+                        onClick = { selectedPolicyTab = 3 },
+                        text = { Text("Độ Tuổi & Nội Quy", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                    )
+                }
+
+                // Content
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    when (selectedPolicyTab) {
+                        0 -> {
+                            // Điều khoản sử dụng
+                            item {
+                                PolicySection(
+                                    title = "1. Chấp Thuận Các Điều Khoản",
+                                    content = "Bằng việc cài đặt, đăng ký hoặc sử dụng ứng dụng Neon Cine để đặt vé xem phim và bắp nước, bạn đồng ý tuân thủ toàn bộ các điều khoản và điều kiện hoạt động được quy định tại đây."
+                                )
+                            }
+                            item {
+                                PolicySection(
+                                    title = "2. Tài Khoản & Trách Nhiệm Thành Viên",
+                                    content = "• Người dùng chịu trách nhiệm bảo mật thông tin đăng nhập và mật khẩu của mình.\n• Mọi giao dịch được thực hiện qua tài khoản của bạn được coi là do bạn trực tiếp xác nhận.\n• Nghiêm cấm hành vi sử dụng công cụ tự động (bot), giả mạo thông tin hoặc gian lận voucher khuyến mãi."
+                                )
+                            }
+                            item {
+                                PolicySection(
+                                    title = "3. Giá Vé & Thanh Toán Trực Tuyến",
+                                    content = "• Toàn bộ giá vé, phụ thu phòng chiếu (IMAX, 3D, VIP) và combo bắp nước được niêm yết công khai bằng Việt Nam Đồng (VND), đã bao gồm thuế GTGT.\n• Giao dịch thanh toán qua MoMo, VNPAY, Thẻ nội địa và Quốc tế được bảo vệ theo giao thức an toàn SSL."
+                                )
+                            }
+                            item {
+                                PolicySection(
+                                    title = "4. Quyền Sở Hữu Trí Tuệ",
+                                    content = "Hình ảnh, trailer phim, poster, biểu trưng và mã nguồn ứng dụng thuộc quyền sở hữu của Neon Cine và các nhà phát hành phim đối tác. Nghiêm cấm mọi hành vi sao chép nhằm mục đích thương mại trái phép."
+                                )
+                            }
+                        }
+
+                        1 -> {
+                            // Chính sách bảo mật
+                            item {
+                                PolicySection(
+                                    title = "1. Thu Thập Thông Tin",
+                                    content = "Chúng tôi chỉ thu thập các thông tin cần thiết phục vụ việc xuất vé điện tử và quyền lợi thành viên gồm: Họ tên, Số điện thoại, Địa chỉ Email và Lịch sử giao dịch đặt vé."
+                                )
+                            }
+                            item {
+                                PolicySection(
+                                    title = "2. Bảo Mật Thanh Toán (PCI-DSS)",
+                                    content = "Neon Cine không lưu trữ thông tin số thẻ tín dụng hoặc mã bảo mật CVV trên hệ thống. Toàn bộ tiến trình thanh toán được mã hóa và xử lý trực tiếp qua các đối tác cổng thanh toán được Ngân hàng Nhà nước cấp phép."
+                                )
+                            }
+                            item {
+                                PolicySection(
+                                    title = "3. Cam Kết Không Chia Sẻ Dữ Liệu",
+                                    content = "Thông tin cá nhân của bạn được bảo mật tuyệt đối. Chúng tôi cam đoan không bán, trao đổi hoặc cung cấp dữ liệu người dùng cho bất kỳ bên thứ ba nào vì mục đích quảng cáo rác."
+                                )
+                            }
+                            item {
+                                PolicySection(
+                                    title = "4. Quyền Của Khách Hàng",
+                                    content = "Bạn có quyền tra cứu, cập nhật thông tin cá nhân, thay đổi ảnh đại diện hoặc yêu cầu xóa toàn bộ lịch sử vé xem phim bất kỳ lúc nào trong ứng dụng."
+                                )
+                            }
+                        }
+
+                        2 -> {
+                            // Đổi trả & Hoàn vé
+                            item {
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = MomoPrimary.copy(alpha = 0.1f)),
+                                    border = BorderStroke(1.dp, MomoPrimary.copy(alpha = 0.4f)),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(14.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Rounded.Info, contentDescription = null, tint = MomoPrimary, modifier = Modifier.size(18.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Quy Định Đổi Vé", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MomoPrimary)
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = "Khách hàng được hỗ trợ đổi sang suất chiếu khác trước giờ chiếu ít nhất 60 phút. Liên hệ Hotline 1900 6868 hoặc quầy vé tại rạp.",
+                                            fontSize = 11.sp,
+                                            lineHeight = 17.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
+                            item {
+                                PolicySection(
+                                    title = "1. Chính Sách Hoàn Tiền Vé",
+                                    content = "• Vé xem phim đã mua thành công không áp dụng hoàn tiền tự động nếu khách hàng không đến xem đúng giờ.\n• Trong trường hợp xảy ra sự cố kỹ thuật từ rạp (mất điện, lỗi máy chiếu, hoãn chiếu), Neon Cine hoàn tiền 100% qua tài khoản thanh toán ban đầu hoặc tặng 02 voucher xem phim miễn phí."
+                                )
+                            }
+                            item {
+                                PolicySection(
+                                    title = "2. Vé Đặt Nhầm Suất Hoặc Nhầm Phim",
+                                    content = "Vui lòng kiểm tra kỹ thông tin rạp, ngày chiếu và giờ chiếu trước khi xác nhận thanh toán. Trong vòng 15 phút sau khi đặt nhầm, hãy gọi ngay hotline CSKH để được chuyên viên hỗ trợ đổi suất sớm nhất."
+                                )
+                            }
+                        }
+
+                        3 -> {
+                            // Độ tuổi & Nội quy rạp
+                            item {
+                                Text(
+                                    text = "Bảng Phân Loại Độ Tuổi (Theo Cục Điện Ảnh)",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            item {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    AgeRatingItem(badge = "P", color = Color(0xFF4CAF50), desc = "Phổ biến: Phim được phép phổ biến đến người xem ở mọi độ tuổi.")
+                                    AgeRatingItem(badge = "K", color = Color(0xFF2196F3), desc = "Dưới 13 tuổi: Được xem với điều kiện có cha, mẹ hoặc người giám hộ đi cùng.")
+                                    AgeRatingItem(badge = "T13", color = Color(0xFFFF9800), desc = "13+: Phim được phép phổ biến đến khán giả từ đủ 13 tuổi trở lên.")
+                                    AgeRatingItem(badge = "T16", color = Color(0xFFE91E63), desc = "16+: Phim được phép phổ biến đến khán giả từ đủ 16 tuổi trở lên.")
+                                    AgeRatingItem(badge = "T18", color = Color(0xFFF44336), desc = "18+: Phim dành riêng cho khán giả từ đủ 18 tuổi trở lên (Yêu cầu xuất trình CCCD/VNeID).")
+                                    AgeRatingItem(badge = "C", color = Color(0xFF9E9E9E), desc = "Cấm phổ biến: Phim không được phép phát hành.")
+                                }
+                            }
+                            item {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                PolicySection(
+                                    title = "Nội Quy Phòng Chiếu",
+                                    content = "• Chuyển điện thoại sang chế độ rung/im lặng trước khi phim bắt đầu.\n• Nghiêm cấm ghi âm, chụp ảnh, quay video màn hình chiếu (Hành vi vi phạm bản quyền sẽ bị xử lý theo pháp luật).\n• Không hút thuốc (kể cả thuốc lá điện tử) trong toàn bộ khuôn viên rạp.\n• Vui lòng không mang thức ăn có mùi nặng từ ngoài vào phòng chiếu."
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Footer
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Đã Hiểu & Đóng", fontWeight = FontWeight.Bold, color = NeonSecondary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PolicySection(title: String, content: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                text = title,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = content,
+                fontSize = 11.sp,
+                lineHeight = 17.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+fun AgeRatingItem(badge: String, color: Color, desc: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(color),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = badge,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 13.sp,
+                color = Color.White
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = desc,
+            fontSize = 11.sp,
+            lineHeight = 16.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
