@@ -241,12 +241,13 @@ object SupabaseSyncService {
                     obj.has("movie_title") && obj.optString("movie_title").isNotBlank() -> obj.optString("movie_title")
                     obj.has("movieTitle") && obj.optString("movieTitle").isNotBlank() -> obj.optString("movieTitle")
                     obj.has("title") && obj.optString("title").isNotBlank() -> obj.optString("title")
+                    obj.has("movie_name") && obj.optString("movie_name").isNotBlank() -> obj.optString("movie_name")
+                    obj.has("film_name") && obj.optString("film_name").isNotBlank() -> obj.optString("film_name")
                     else -> ""
                 }
-                val resolvedTitle = if (rawTitle.isNotBlank() && rawTitle != "Phim") {
-                    rawTitle
-                } else {
-                    when (mId) {
+                val resolvedTitle = when {
+                    rawTitle.isNotBlank() && rawTitle != "Phim" && rawTitle != "Phim Chiếu Rạp" -> rawTitle
+                    mId in 1..12 -> when (mId) {
                         1 -> "Lật Mặt 7: Một Điều Ước"
                         2 -> "Mai"
                         3 -> "Doraemon: Bản Tình Ca Đất Nước"
@@ -259,8 +260,14 @@ object SupabaseSyncService {
                         10 -> "Mufasa: The Lion King"
                         11 -> "Moana 2 (Hành Trình Của Moana 2)"
                         12 -> "Sonic the Hedgehog 3"
-                        else -> if (rawTitle.isNotBlank()) rawTitle else "Phim Chiếu Rạp"
+                        else -> ""
                     }
+                    else -> ""
+                }
+                
+                // Bỏ qua các vé rác/vé lỗi không có tiêu đề phim hợp lệ
+                if (resolvedTitle.isBlank()) {
+                    continue
                 }
                 val seatVal = when {
                     obj.has("seats") && obj.optString("seats").isNotBlank() -> obj.optString("seats")
@@ -277,12 +284,13 @@ object SupabaseSyncService {
                     obj.has("movie_poster") && obj.optString("movie_poster").isNotBlank() -> obj.optString("movie_poster")
                     obj.has("moviePoster") && obj.optString("moviePoster").isNotBlank() -> obj.optString("moviePoster")
                     obj.has("posterUrl") && obj.optString("posterUrl").isNotBlank() -> obj.optString("posterUrl")
+                    obj.has("poster") && obj.optString("poster").isNotBlank() -> obj.optString("poster")
                     else -> when (mId) {
                         1 -> "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&auto=format&fit=crop"
                         2 -> "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=500&auto=format&fit=crop"
                         3 -> "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=500&auto=format&fit=crop"
                         4 -> "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop"
-                        else -> "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop"
+                        else -> "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&auto=format&fit=crop"
                     }
                 }
                 val rawBarcode = obj.optString("barcode", "")
@@ -293,7 +301,7 @@ object SupabaseSyncService {
                 list.add(
                     Ticket(
                         id = 0, // Dùng 0 để Room tự sinh auto-increment ID tránh đè ID vé địa phương
-                        movieId = mId,
+                        movieId = if (mId > 0) mId else 1,
                         movieTitle = resolvedTitle,
                         moviePoster = posterVal,
                         cinema = obj.optString("cinema", "Neon Cine Space - Vincom"),
@@ -346,6 +354,8 @@ object SupabaseSyncService {
             put("status", "PAID")
             put("booking_date", todayStr)
             put("booking_code", bookingCode)
+            put("movie_title", ticket.movieTitle)
+            put("movie_id", ticket.movieId)
             if (ticket.combo.isNotBlank()) put("selected_popcorns", ticket.combo)
             if (ticket.userName.isNotBlank()) put("guest_name", ticket.userName)
         }.toString()
@@ -390,6 +400,16 @@ object SupabaseSyncService {
                         put("status", "SOLD")
                         put("customer_id", customerId)
                         put("source", "APP")
+                        put("movie_title", ticket.movieTitle)
+                        put("movie_id", ticket.movieId)
+                        put("movie_poster", ticket.moviePoster)
+                        put("cinema", ticket.cinema)
+                        put("date_time", ticket.dateTime)
+                        put("barcode", ticket.barcode)
+                        put("booking_code", bookingCode)
+                        put("user_email", ticket.userEmail)
+                        put("user_name", ticket.userName)
+                        put("total_price", ticket.totalPrice)
                     }.toString()
 
                     val ticketReq = Request.Builder()
@@ -418,32 +438,83 @@ object SupabaseSyncService {
     }
 
     /**
-     * Xóa vé khỏi Supabase
+     * Xóa vé khỏi Supabase (Xóa cả theo barcode, booking_code và ticket_code trên cả bảng tickets và bookings)
      */
-    fun deleteTicketFromSupabase(barcode: String, onComplete: (Boolean) -> Unit) {
-        if (SUPABASE_URL.contains("your-project-id") || barcode.isBlank()) {
+    fun deleteTicketFromSupabase(barcode: String, bookingCode: String = "", onComplete: (Boolean) -> Unit = {}) {
+        if (SUPABASE_URL.contains("your-project-id") || (barcode.isBlank() && bookingCode.isBlank())) {
             onComplete(true)
             return
         }
-        val ticketCode = barcode.takeLast(5)
-        val url = "$SUPABASE_URL/rest/v1/tickets?ticket_code=eq.$ticketCode"
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("apikey", SUPABASE_ANON_KEY)
-            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
-            .delete()
-            .build()
+        val ticketCode = if (barcode.isNotBlank()) barcode.takeLast(5) else bookingCode
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                onComplete(false)
-            }
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    onComplete(response.isSuccessful)
+        // Danh sách các endpoint để xóa sạch dữ liệu vé liên quan
+        val endpoints = mutableListOf<String>()
+        if (barcode.isNotBlank()) {
+            endpoints.add("$SUPABASE_URL/rest/v1/tickets?barcode=eq.$barcode")
+            endpoints.add("$SUPABASE_URL/rest/v1/bookings?barcode=eq.$barcode")
+        }
+        if (bookingCode.isNotBlank()) {
+            endpoints.add("$SUPABASE_URL/rest/v1/tickets?booking_code=eq.$bookingCode")
+            endpoints.add("$SUPABASE_URL/rest/v1/bookings?booking_code=eq.$bookingCode")
+        }
+        if (ticketCode.isNotBlank()) {
+            endpoints.add("$SUPABASE_URL/rest/v1/tickets?ticket_code=eq.$ticketCode")
+        }
+
+        for (url in endpoints) {
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("apikey", SUPABASE_ANON_KEY)
+                .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+                .delete()
+                .build()
+
+            client.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {}
+                override fun onResponse(call: Call, response: Response) {
+                    response.close()
                 }
-            }
-        })
+            })
+        }
+        onComplete(true)
+    }
+
+    /**
+     * Xóa toàn bộ vé từ Supabase (theo email tài khoản hoặc xóa toàn bộ bảng vé)
+     */
+    fun deleteAllTicketsFromSupabase(userEmail: String = "", onComplete: (Boolean) -> Unit = {}) {
+        if (SUPABASE_URL.contains("your-project-id")) {
+            onComplete(true)
+            return
+        }
+
+        val deleteUrls = mutableListOf<String>()
+        if (userEmail.isNotBlank()) {
+            deleteUrls.add("$SUPABASE_URL/rest/v1/tickets?user_email=eq.$userEmail")
+            deleteUrls.add("$SUPABASE_URL/rest/v1/bookings?customer_email=eq.$userEmail")
+            deleteUrls.add("$SUPABASE_URL/rest/v1/bookings?user_email=eq.$userEmail")
+        } else {
+            // Xóa tất cả vé khi người dùng yêu cầu xóa toàn bộ lịch sử
+            deleteUrls.add("$SUPABASE_URL/rest/v1/tickets?id=neq.NULL_DUMMY_ID")
+            deleteUrls.add("$SUPABASE_URL/rest/v1/bookings?id=neq.NULL_DUMMY_ID")
+        }
+
+        for (url in deleteUrls) {
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("apikey", SUPABASE_ANON_KEY)
+                .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+                .delete()
+                .build()
+
+            client.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {}
+                override fun onResponse(call: Call, response: Response) {
+                    response.close()
+                }
+            })
+        }
+        onComplete(true)
     }
 
     /**

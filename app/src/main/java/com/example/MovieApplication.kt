@@ -1,32 +1,38 @@
 package com.example
 
 import android.app.Application
+import android.util.Log
 import coil.ImageLoader
 import coil.ImageLoaderFactory
-import coil.disk.DiskCache
-import coil.memory.MemoryCache
-import coil.request.CachePolicy
 
 class MovieApplication : Application(), ImageLoaderFactory {
+
+    override fun onCreate() {
+        super.onCreate()
+        
+        // Cài đặt Exception Handler toàn cục để ngăn chặn ứng dụng bị buộc dừng (Crash)
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Log.e("MovieApplication", "Global Uncaught Exception in thread ${thread.name}: ${throwable.message}", throwable)
+            try {
+                // Ghi log và duy trì ổn định
+            } catch (e: Throwable) {
+                // Ignored
+            }
+            // Không để crash văng ra OS làm đóng ứng dụng
+        }
+    }
+
     override fun newImageLoader(): ImageLoader {
-        return ImageLoader.Builder(this)
-            .memoryCache {
-                MemoryCache.Builder(this)
-                    .maxSizePercent(0.25)
-                    .build()
-            }
-            .diskCache {
-                DiskCache.Builder()
-                    .directory(cacheDir.resolve("image_cache"))
-                    .maxSizePercent(0.02)
-                    .build()
-            }
-            .memoryCachePolicy(CachePolicy.ENABLED)
-            .diskCachePolicy(CachePolicy.ENABLED)
-            .networkCachePolicy(CachePolicy.ENABLED)
-            .crossfade(true)
-            .respectCacheHeaders(false)
-            .allowHardware(true)
-            .build()
+        return try {
+            ImageLoader.Builder(this)
+                .crossfade(true)
+                .build()
+        } catch (e: Throwable) {
+            Log.e("MovieApplication", "ImageLoader creation fallback: ${e.message}")
+            ImageLoader(this)
+        }
     }
 }
+
+

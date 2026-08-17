@@ -27,8 +27,8 @@ sealed class AIAnalysisState {
 
 class MovieViewModel(application: Application) : AndroidViewModel(application) {
     private val database = CinemaDatabase.getDatabase(application)
-    private val repository = MovieRepository(database.cinemaDao())
     private val prefs = application.getSharedPreferences("neon_cine_prefs", android.content.Context.MODE_PRIVATE)
+    private val repository = MovieRepository(database.cinemaDao(), prefs)
 
     private val _movies = MutableStateFlow<List<Movie>>(repository.movies)
     private val _customMovieDatesTrigger = MutableStateFlow(0)
@@ -168,6 +168,9 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _userName = MutableStateFlow("")
     val userName: StateFlow<String> = _userName.asStateFlow()
+
+    private val _userAvatarUrl = MutableStateFlow("")
+    val userAvatarUrl: StateFlow<String> = _userAvatarUrl.asStateFlow()
 
     private val _userPoints = MutableStateFlow(150) // Điểm tích lũy thành viên Neon Club
     val userPoints: StateFlow<Int> = _userPoints.asStateFlow()
@@ -682,48 +685,61 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     val userNotifications: StateFlow<List<UserNotification>> = _userNotifications.asStateFlow()
 
     init {
-        // Tắt splash screen sau 2.2 giây
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(2200)
-            _showSplashScreen.value = false
-        }
-
-        // Tải thông tin tài khoản đã đăng nhập từ bộ nhớ tạm local
-        _isLoggedIn.value = prefs.getBoolean("is_logged_in", false)
-        _userEmail.value = prefs.getString("user_email", "") ?: ""
-        _userName.value = prefs.getString("user_name", "") ?: ""
-        _userPoints.value = prefs.getInt("user_points", 150)
-        _userBalance.value = prefs.getInt("user_balance", 500000)
-        _isPromoCodeUsed.value = false
-
-        if (_userEmail.value.isNotBlank()) {
-            loadNotificationsForUser(_userEmail.value)
-        }
-
-        // Khởi tạo đánh giá mặc định
-        viewModelScope.launch {
-            repository.initDefaultDataIfNeeded()
-        }
-
-        // Đồng bộ vé đã đặt và mã giảm giá từ Supabase về Room Local khi mở app
-        viewModelScope.launch {
-            try {
-                repository.syncTicketsFromSupabase()
-                repository.syncPromoCodesFromSupabase()
-            } catch (e: Exception) {
-                android.util.Log.e("MovieViewModel", "Lỗi đồng bộ dữ liệu khi khởi tạo: ${e.message}")
+        try {
+            // Tắt splash screen sau 2.2 giây
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(2200)
+                _showSplashScreen.value = false
             }
+
+            // Tải thông tin tài khoản đã đăng nhập từ bộ nhớ tạm local
+            _isLoggedIn.value = prefs.getBoolean("is_logged_in", false)
+            _userEmail.value = prefs.getString("user_email", "") ?: ""
+            _userName.value = prefs.getString("user_name", "") ?: ""
+            _userAvatarUrl.value = prefs.getString("user_avatar_${_userEmail.value}", "") ?: ""
+            _userPoints.value = prefs.getInt("user_points", 150)
+            _userBalance.value = prefs.getInt("user_balance", 500000)
+            _isPromoCodeUsed.value = false
+
+            if (_userEmail.value.isNotBlank()) {
+                loadNotificationsForUser(_userEmail.value)
+            }
+
+            // Khởi tạo đánh giá mặc định
+            viewModelScope.launch {
+                try {
+                    repository.initDefaultDataIfNeeded()
+                } catch (e: Throwable) {
+                    android.util.Log.e("MovieViewModel", "initDefaultData error: ${e.message}")
+                }
+            }
+
+            // Đồng bộ vé đã đặt và mã giảm giá từ Supabase về Room Local khi mở app
+            viewModelScope.launch {
+                try {
+                    repository.syncTicketsFromSupabase()
+                    repository.syncPromoCodesFromSupabase()
+                } catch (e: Throwable) {
+                    android.util.Log.e("MovieViewModel", "Lỗi đồng bộ dữ liệu khi khởi tạo: ${e.message}")
+                }
+            }
+
+            // Chọn ngày mặc định là hôm nay
+            val sdf = SimpleDateFormat("dd/MM", Locale.getDefault())
+            _selectedDate.value = sdf.format(Date())
+
+            // Đồng bộ phim, suất chiếu, chỗ ngồi & combo bắp nước từ Supabase
+            try {
+                loadProductsFromSupabase()
+                loadMoviesFromSupabase()
+                loadScreeningRoomsFromSupabase()
+                loadShowtimesAndBookingsFromSupabase()
+            } catch (e: Throwable) {
+                android.util.Log.e("MovieViewModel", "loadSupabase error: ${e.message}")
+            }
+        } catch (e: Throwable) {
+            android.util.Log.e("MovieViewModel", "Fatal init error caught: ${e.message}", e)
         }
-
-        // Chọn ngày mặc định là hôm nay
-        val sdf = SimpleDateFormat("dd/MM", Locale.getDefault())
-        _selectedDate.value = sdf.format(Date())
-
-        // Đồng bộ phim, suất chiếu, chỗ ngồi & combo bắp nước từ Supabase
-        loadProductsFromSupabase()
-        loadMoviesFromSupabase()
-        loadScreeningRoomsFromSupabase()
-        loadShowtimesAndBookingsFromSupabase()
     }
 
     fun loadScreeningRoomsFromSupabase() {
@@ -822,6 +838,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         _userEmail.value = email
         val defaultName = if (name.isNotBlank()) name else email.substringBefore("@")
         _userName.value = defaultName
+        _userAvatarUrl.value = prefs.getString("user_avatar_$email", "") ?: ""
         _userPoints.value = 150
         _userBalance.value = 500000
         _isPromoCodeUsed.value = false
@@ -894,11 +911,43 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         _isLoggedIn.value = false
         _userEmail.value = ""
         _userName.value = ""
+        _userAvatarUrl.value = ""
         _userPoints.value = 150
         _userBalance.value = 500000
         _isPromoCodeUsed.value = false
         _userNotifications.value = emptyList()
         prefs.edit().clear().apply()
+    }
+
+    // Cập nhật ảnh đại diện avatar (Hỗ trợ ảnh từ thư viện thiết bị hoặc link ảnh)
+    fun updateUserAvatar(newAvatarUriOrUrl: String) {
+        _userAvatarUrl.value = newAvatarUriOrUrl
+        val key = if (_userEmail.value.isNotBlank()) "user_avatar_${_userEmail.value}" else "user_avatar_guest"
+        prefs.edit().putString(key, newAvatarUriOrUrl).apply()
+        
+        addNotification(
+            title = "🖼️ Đã cập nhật ảnh đại diện",
+            message = "Ảnh đại diện tài khoản của bạn đã được thay đổi thành công.",
+            type = "system"
+        )
+    }
+
+    // Dọn dẹp các vé mẫu, vé rác không hợp lệ
+    fun cleanGhostTickets() {
+        viewModelScope.launch {
+            val currentTickets = tickets.value
+            val ghostTickets = currentTickets.filter { 
+                it.movieTitle == "Phim Chiếu Rạp" || it.movieTitle == "Phim" || it.movieTitle.isBlank() || it.movieId <= 0 
+            }
+            for (t in ghostTickets) {
+                repository.deleteTicket(t.id, t.barcode, t.bookingCode)
+            }
+            addNotification(
+                title = "✨ Đã dọn dẹp vé",
+                message = "Đã dọn dẹp ${ghostTickets.size} vé mẫu/không hợp lệ khỏi danh sách.",
+                type = "system"
+            )
+        }
     }
 
     // --- Quản lý Thông báo tin nhắn từng Tài khoản (Acc) ---
@@ -1464,7 +1513,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     // Xóa một vé cụ thể
     fun deleteTicket(ticket: Ticket) {
         viewModelScope.launch {
-            repository.deleteTicket(ticket.id, ticket.barcode)
+            repository.deleteTicket(ticket.id, ticket.barcode, ticket.bookingCode)
             addNotification(
                 title = "🗑️ Đã xóa vé",
                 message = "Đã xóa vé xem phim '${ticket.movieTitle}' (Ghế: ${ticket.seats}) khỏi danh sách.",
@@ -1476,7 +1525,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     // Xóa toàn bộ lịch sử vé
     fun clearAllTickets() {
         viewModelScope.launch {
-            repository.deleteAllTickets()
+            repository.deleteAllTickets(_userEmail.value)
             addNotification(
                 title = "🗑️ Đã dọn sạch lịch sử vé",
                 message = "Toàn bộ vé xem phim cũ đã được xóa thành công.",

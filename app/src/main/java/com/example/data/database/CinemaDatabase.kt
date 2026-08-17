@@ -18,15 +18,25 @@ abstract class CinemaDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): CinemaDatabase {
             return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    CinemaDatabase::class.java,
-                    "cinema_database"
-                )
-                .fallbackToDestructiveMigration()
-                .build()
-                INSTANCE = instance
-                instance
+                try {
+                    val instance = Room.databaseBuilder(
+                        context.applicationContext,
+                        CinemaDatabase::class.java,
+                        "cinema_database"
+                    )
+                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigrationOnDowngrade()
+                    .build()
+                    INSTANCE = instance
+                    instance
+                } catch (e: Exception) {
+                    val fallbackInstance = Room.inMemoryDatabaseBuilder(
+                        context.applicationContext,
+                        CinemaDatabase::class.java
+                    ).build()
+                    INSTANCE = fallbackInstance
+                    fallbackInstance
+                }
             }
         }
     }

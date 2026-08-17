@@ -16,7 +16,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-class MovieRepository(private val cinemaDao: CinemaDao) {
+class MovieRepository(
+    private val cinemaDao: CinemaDao,
+    private val prefs: android.content.SharedPreferences? = null
+) {
 
     val allTickets: Flow<List<Ticket>> = cinemaDao.getAllTickets()
     val allPromoCodes: Flow<List<PromoCode>> = cinemaDao.getAllPromoCodes()
@@ -264,28 +267,43 @@ class MovieRepository(private val cinemaDao: CinemaDao) {
         }
     }
 
-    suspend fun deleteTicket(ticketId: Int, barcode: String = "") = withContext(Dispatchers.IO) {
+    suspend fun deleteTicket(ticketId: Int, barcode: String = "", bookingCode: String = "") = withContext(Dispatchers.IO) {
         cinemaDao.deleteTicket(ticketId)
-        if (barcode.isNotBlank()) {
-            com.example.data.supabase.SupabaseSyncService.deleteTicketFromSupabase(barcode) { }
+        if (barcode.isNotBlank() || bookingCode.isNotBlank()) {
+            prefs?.let { p ->
+                val deleted = p.getStringSet("deleted_ticket_barcodes", emptySet())?.toMutableSet() ?: mutableSetOf()
+                if (barcode.isNotBlank()) deleted.add(barcode)
+                if (bookingCode.isNotBlank()) deleted.add(bookingCode)
+                p.edit().putStringSet("deleted_ticket_barcodes", deleted).apply()
+            }
+            com.example.data.supabase.SupabaseSyncService.deleteTicketFromSupabase(barcode, bookingCode)
         }
     }
 
-    suspend fun deleteAllTickets() = withContext(Dispatchers.IO) {
+    suspend fun deleteAllTickets(userEmail: String = "") = withContext(Dispatchers.IO) {
         cinemaDao.deleteAllTickets()
+        prefs?.edit()?.putLong("tickets_cleared_timestamp", System.currentTimeMillis())?.apply()
+        com.example.data.supabase.SupabaseSyncService.deleteAllTicketsFromSupabase(userEmail)
     }
 
     suspend fun syncTicketsFromSupabase() = withContext(Dispatchers.IO) {
         com.example.data.supabase.SupabaseSyncService.fetchTicketsFromSupabase { remoteTickets ->
             if (remoteTickets.isNotEmpty()) {
-                CoroutineScope(Dispatchers.IO).launch {
-                    val count = cinemaDao.getTicketCount()
-                    if (count == 0) {
-                        for (ticket in remoteTickets) {
-                            cinemaDao.insertTicket(ticket)
-                        }
-                    } else {
-                        for (ticket in remoteTickets) {
+                val deletedBarcodes = prefs?.getStringSet("deleted_ticket_barcodes", emptySet()) ?: emptySet()
+                val clearedTimestamp = prefs?.getLong("tickets_cleared_timestamp", 0L) ?: 0L
+
+                // Lọc bỏ tất cả các vé đã từng bị người dùng bấm xóa, vé cũ trước thời điểm xóa, hoặc vé lỗi/rác
+                val validTickets = remoteTickets.filter { ticket ->
+                    val isDeleted = deletedBarcodes.contains(ticket.barcode) || 
+                                    (ticket.bookingCode.isNotBlank() && deletedBarcodes.contains(ticket.bookingCode))
+                    val isOldCleared = clearedTimestamp > 0L && ticket.timestamp <= clearedTimestamp
+                    val isInvalid = ticket.movieTitle.isBlank() || ticket.movieTitle == "Phim Chiếu Rạp" || ticket.movieTitle == "Phim"
+                    !isDeleted && !isOldCleared && !isInvalid
+                }
+
+                if (validTickets.isNotEmpty()) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        for (ticket in validTickets) {
                             if (ticket.barcode.isNotBlank()) {
                                 val existing = cinemaDao.getTicketByBarcode(ticket.barcode)
                                 if (existing == null) {

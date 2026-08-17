@@ -32,6 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.ui.MovieViewModel
@@ -548,10 +551,31 @@ fun ProfileScreen(viewModel: MovieViewModel) {
 fun LoggedInProfileView(viewModel: MovieViewModel) {
     val userName by viewModel.userName.collectAsStateWithLifecycle()
     val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
+    val userAvatarUrl by viewModel.userAvatarUrl.collectAsStateWithLifecycle()
     val userBalance by viewModel.userBalance.collectAsStateWithLifecycle()
     val userNotifications by viewModel.userNotifications.collectAsStateWithLifecycle()
 
     var showNotificationDialog by remember { mutableStateOf(false) }
+    var showAvatarDialog by remember { mutableStateOf(false) }
+    var customUrlInput by remember { mutableStateOf("") }
+    var showUrlInputDialog by remember { mutableStateOf(false) }
+
+    // Launcher chọn ảnh từ thư viện máy (Photo Picker / Gallery)
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.updateUserAvatar(uri.toString())
+        }
+    }
+
+    val getContentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.updateUserAvatar(uri.toString())
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -562,27 +586,97 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
         item {
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Avatar & Tên người dùng
+            // Avatar & Nút đổi ảnh đại diện
             Box(
                 modifier = Modifier
-                    .size(90.dp)
-                    .clip(CircleShape)
-                    .background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(NeonPrimary, NeonSecondary)
-                        )
-                    ),
+                    .size(104.dp)
+                    .clickable { showAvatarDialog = true },
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = userName.take(1).uppercase(Locale.getDefault()),
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White
-                )
+                // Viền sáng bóng bẩy cho Avatar
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .clip(CircleShape)
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(MomoPrimary, NeonSecondary, Color(0xFF00C6FF))
+                            )
+                        )
+                        .padding(3.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (userAvatarUrl.isNotBlank()) {
+                        AsyncImage(
+                            model = userAvatarUrl,
+                            contentDescription = "Ảnh đại diện $userName",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                                .background(Color.DarkGray)
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                                .background(
+                                    brush = Brush.linearGradient(
+                                        colors = listOf(NeonPrimary, NeonSecondary)
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = userName.take(1).uppercase(Locale.getDefault()),
+                                fontSize = 38.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
+                // Badge nút Camera đổi ảnh ở góc dưới
+                Surface(
+                    shape = CircleShape,
+                    color = MomoPrimary,
+                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.surface),
+                    shadowElevation = 4.dp,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(32.dp)
+                        .clickable { showAvatarDialog = true }
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Rounded.CameraAlt,
+                            contentDescription = "Đổi ảnh đại diện",
+                            tint = Color.White,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            TextButton(
+                onClick = { showAvatarDialog = true },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.PhotoCamera,
+                    contentDescription = null,
+                    tint = MomoPrimary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Đổi ảnh đại diện", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MomoPrimary)
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text(
                 text = userName,
@@ -647,6 +741,184 @@ fun LoggedInProfileView(viewModel: MovieViewModel) {
 
             Spacer(modifier = Modifier.height(48.dp))
         }
+    }
+
+    // Dialog Tùy chọn Thay đổi Ảnh Đại Diện (Avatar)
+    if (showAvatarDialog) {
+        Dialog(onDismissRequest = { showAvatarDialog = false }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Thay Đổi Ảnh Đại Diện",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Tải ảnh từ điện thoại hoặc chọn nhân vật yêu thích",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Lựa chọn 1: Chọn từ thư viện ảnh thiết bị
+                    Button(
+                        onClick = {
+                            showAvatarDialog = false
+                            try {
+                                photoPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            } catch (e: Exception) {
+                                getContentLauncher.launch("image/*")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary)
+                    ) {
+                        Icon(Icons.Rounded.AddPhotoAlternate, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Tải Ảnh Từ Thư Viện Máy", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "— Hoặc chọn Avatar Neon Cine —",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Bộ sưu tập avatar mẫu phong cách điện ảnh
+                    val presetAvatars = listOf(
+                        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop" to "Đạo diễn",
+                        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop" to "Mọt phim",
+                        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop" to "Ngôi sao",
+                        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop" to "Cyberpunk",
+                        "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&auto=format&fit=crop" to "Anime",
+                        "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop" to "Siêu anh hùng"
+                    )
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(presetAvatars) { (url, label) ->
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .clickable {
+                                        viewModel.updateUserAvatar(url)
+                                        showAvatarDialog = false
+                                    }
+                            ) {
+                                AsyncImage(
+                                    model = url,
+                                    contentDescription = label,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .clip(CircleShape)
+                                        .border(2.dp, if (userAvatarUrl == url) MomoPrimary else Color.Transparent, CircleShape)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                showAvatarDialog = false
+                                customUrlInput = userAvatarUrl
+                                showUrlInputDialog = true
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Dán Link URL", fontSize = 12.sp)
+                        }
+
+                        if (userAvatarUrl.isNotBlank()) {
+                            TextButton(
+                                onClick = {
+                                    viewModel.updateUserAvatar("")
+                                    showAvatarDialog = false
+                                },
+                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Gỡ avatar", fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    TextButton(onClick = { showAvatarDialog = false }) {
+                        Text("Đóng")
+                    }
+                }
+            }
+        }
+    }
+
+    // Dialog nhập link URL ảnh trực tiếp
+    if (showUrlInputDialog) {
+        AlertDialog(
+            onDismissRequest = { showUrlInputDialog = false },
+            title = { Text("Nhập Đường Dẫn Link Ảnh", fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = customUrlInput,
+                    onValueChange = { customUrlInput = it },
+                    label = { Text("URL hình ảnh (https://...)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (customUrlInput.isNotBlank()) {
+                            viewModel.updateUserAvatar(customUrlInput.trim())
+                        }
+                        showUrlInputDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary)
+                ) {
+                    Text("Lưu Avatar", color = Color.White)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showUrlInputDialog = false }) {
+                    Text("Hủy")
+                }
+            }
+        )
     }
 
 
