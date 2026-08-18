@@ -432,6 +432,17 @@ object SupabaseSyncService {
                         }
                     })
                 }
+                // 3. Tự động đồng bộ / cập nhật thông tin khách hàng vào các bảng customers, costumers, profiles để thống kê
+                if (ticket.userEmail.isNotBlank() || ticket.userName.isNotBlank()) {
+                    val customerProfile = UserProfile(
+                        email = ticket.userEmail.ifBlank { "guest_${ticket.bookingCode.lowercase()}@cinema.com" },
+                        name = ticket.userName.ifBlank { "Khách Hàng Neon" },
+                        points = 150,
+                        balance = 500000
+                    )
+                    pushProfileToSupabase(customerProfile) {}
+                }
+
                 onComplete(true)
             }
         })
@@ -518,7 +529,7 @@ object SupabaseSyncService {
     }
 
     /**
-     * Đẩy Profile người dùng lên Supabase table 'profiles'
+     * Đẩy Profile và thông tin Khách hàng lên Supabase (Đồng bộ vào các bảng: customers, costumers, profiles, khach_hang, users để phục vụ thống kê)
      */
     fun pushProfileToSupabase(profile: UserProfile, onComplete: (Boolean) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id") || profile.email.isBlank()) {
@@ -526,39 +537,54 @@ object SupabaseSyncService {
             return
         }
 
-        val url = "$SUPABASE_URL/rest/v1/profiles"
-        val json = JSONObject().apply {
+        val tablesToSync = listOf("customers", "costumers", "profiles", "khach_hang", "users")
+        val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }.format(Date())
+
+        val customerPayload = JSONObject().apply {
             put("email", profile.email)
             put("name", profile.name)
+            put("customer_name", profile.name)
+            put("full_name", profile.name)
+            put("ten", profile.name)
+            put("ho_ten", profile.name)
+            put("ten_khach_hang", profile.name)
             put("points", profile.points)
+            put("diem_tich_luy", profile.points)
+            put("diem", profile.points)
+            put("balance", profile.balance)
+            put("updated_at", nowIso)
         }.toString()
 
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("apikey", SUPABASE_ANON_KEY)
-            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
-            .addHeader("Content-Type", "application/json")
-            .addHeader("Prefer", "resolution=merge-duplicates")
-            .post(json.toRequestBody(jsonMediaType))
-            .build()
+        for (table in tablesToSync) {
+            val url = "$SUPABASE_URL/rest/v1/$table"
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("apikey", SUPABASE_ANON_KEY)
+                .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Prefer", "resolution=merge-duplicates")
+                .post(customerPayload.toRequestBody(jsonMediaType))
+                .build()
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Lỗi kết nối đẩy Profile lên Supabase: ${e.message}")
-                onComplete(false)
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    Log.d(TAG, "Đã lưu Profile lên Supabase: ${response.code}")
-                    onComplete(response.isSuccessful)
+            client.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    Log.e(TAG, "Lỗi kết nối đẩy thông tin khách hàng lên bảng '$table': ${e.message}")
                 }
-            }
-        })
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        Log.d(TAG, "Đã đồng bộ thông tin khách hàng (${profile.name} - ${profile.email}) lên bảng '$table': HTTP ${response.code}")
+                    }
+                }
+            })
+        }
+        onComplete(true)
     }
 
     /**
-     * Đồng bộ và tìm kiếm Profile người dùng từ Supabase table 'profiles' theo email
+     * Đồng bộ và tìm kiếm Profile người dùng từ Supabase (thử lần lượt: customers, costumers, profiles, khach_hang, users) theo email
      */
     fun fetchProfileFromSupabase(email: String, onResult: (UserProfile?) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id") || email.isBlank()) {
@@ -566,7 +592,21 @@ object SupabaseSyncService {
             return
         }
 
-        val url = "$SUPABASE_URL/rest/v1/profiles?email=eq.$email&select=*"
+        fetchProfileFromTables(
+            tables = listOf("customers", "costumers", "profiles", "khach_hang", "users"),
+            index = 0,
+            email = email,
+            onResult = onResult
+        )
+    }
+
+    private fun fetchProfileFromTables(tables: List<String>, index: Int, email: String, onResult: (UserProfile?) -> Unit) {
+        if (index >= tables.size) {
+            onResult(null)
+            return
+        }
+        val tableName = tables[index]
+        val url = "$SUPABASE_URL/rest/v1/$tableName?email=eq.$email&select=*"
         val request = Request.Builder()
             .url(url)
             .addHeader("apikey", SUPABASE_ANON_KEY)
@@ -575,15 +615,14 @@ object SupabaseSyncService {
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Lỗi fetch profile từ Supabase: ${e.message}")
-                onResult(null)
+                Log.e(TAG, "Lỗi fetch profile từ bảng $tableName: ${e.message}")
+                fetchProfileFromTables(tables, index + 1, email, onResult)
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     if (!response.isSuccessful) {
-                        Log.e(TAG, "Supabase profile phản hồi lỗi: ${response.code}")
-                        onResult(null)
+                        fetchProfileFromTables(tables, index + 1, email, onResult)
                         return
                     }
                     val bodyString = response.body?.string() ?: ""
@@ -591,20 +630,37 @@ object SupabaseSyncService {
                         val jsonArray = JSONArray(bodyString)
                         if (jsonArray.length() > 0) {
                             val obj = jsonArray.getJSONObject(0)
+                            val name = when {
+                                obj.has("name") && obj.optString("name").isNotBlank() -> obj.optString("name")
+                                obj.has("customer_name") && obj.optString("customer_name").isNotBlank() -> obj.optString("customer_name")
+                                obj.has("full_name") && obj.optString("full_name").isNotBlank() -> obj.optString("full_name")
+                                obj.has("ten") && obj.optString("ten").isNotBlank() -> obj.optString("ten")
+                                obj.has("ho_ten") && obj.optString("ho_ten").isNotBlank() -> obj.optString("ho_ten")
+                                obj.has("ten_khach_hang") && obj.optString("ten_khach_hang").isNotBlank() -> obj.optString("ten_khach_hang")
+                                else -> "Thành viên Neon"
+                            }
+                            val points = when {
+                                obj.has("points") -> obj.optInt("points", 150)
+                                obj.has("diem_tich_luy") -> obj.optInt("diem_tich_luy", 150)
+                                obj.has("diem") -> obj.optInt("diem", 150)
+                                else -> 150
+                            }
+                            val balance = obj.optInt("balance", 500000)
+                            Log.d(TAG, "Fetch thành công profile khách hàng ($name) từ bảng '$tableName'!")
                             onResult(
                                 UserProfile(
                                     email = obj.optString("email", email),
-                                    name = obj.optString("name", "Thành viên Neon"),
-                                    points = obj.optInt("points", 150),
-                                    balance = 500000
+                                    name = name,
+                                    points = points,
+                                    balance = balance
                                 )
                             )
                         } else {
-                            onResult(null)
+                            fetchProfileFromTables(tables, index + 1, email, onResult)
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "Lỗi phân tích JSON profile: ${e.message}")
-                        onResult(null)
+                        Log.e(TAG, "Lỗi phân tích JSON profile từ $tableName: ${e.message}")
+                        fetchProfileFromTables(tables, index + 1, email, onResult)
                     }
                 }
             }

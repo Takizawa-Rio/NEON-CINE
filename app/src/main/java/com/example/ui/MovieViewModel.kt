@@ -762,6 +762,14 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
             if (_userEmail.value.isNotBlank()) {
                 loadNotificationsForUser(_userEmail.value)
+                // Tự động đồng bộ khách hàng lên Supabase (bảng customers/costumers/profiles)
+                val currentProfile = UserProfile(
+                    email = _userEmail.value,
+                    name = _userName.value.ifBlank { _userEmail.value.substringBefore("@") },
+                    points = _userPoints.value,
+                    balance = _userBalance.value
+                )
+                com.example.data.supabase.SupabaseSyncService.pushProfileToSupabase(currentProfile) {}
             }
 
             // Khởi tạo đánh giá mặc định
