@@ -85,6 +85,7 @@ data class Product(
 
 data class Showtime(
     val id: Int = 0,
+    val uuid: String = "",
     @Json(name = "movie_id") val movieId: Int = 0,
     val movieStringId: String = "",
     @Json(name = "movie_title") val movieTitle: String = "",
@@ -122,11 +123,19 @@ data class Showtime(
 
 data class Booking(
     val id: Int = 0,
+    val bookingCode: String = "",
     @Json(name = "movie_id") val movieId: Int = 0,
+    val movieStringId: String = "",
+    val movieTitle: String = "",
     @Json(name = "showtime_id") val showtimeId: Int = 0,
+    val showtimeUuid: String = "",
     val seats: String = "",
+    val date: String = "",
+    val time: String = "",
+    val cinema: String = "",
     @Json(name = "total_price") val totalPrice: Int = 0,
-    @Json(name = "user_email") val userEmail: String = ""
+    @Json(name = "user_email") val userEmail: String = "",
+    val status: String = "PAID"
 )
 
 data class SeatItem(

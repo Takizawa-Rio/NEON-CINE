@@ -270,7 +270,7 @@ class MovieRepository(
         }
     }
 
-    suspend fun bookTicket(ticket: Ticket) = withContext(Dispatchers.IO) {
+    suspend fun bookTicket(ticket: Ticket, showtimeUuid: String = "") = withContext(Dispatchers.IO) {
         prefs?.let { p ->
             val deleted = p.getStringSet("deleted_ticket_barcodes", emptySet())?.toMutableSet() ?: mutableSetOf()
             if (ticket.barcode.isNotBlank()) deleted.remove(ticket.barcode)
@@ -278,7 +278,7 @@ class MovieRepository(
             p.edit().putStringSet("deleted_ticket_barcodes", deleted).apply()
         }
         cinemaDao.insertTicket(ticket)
-        com.example.data.supabase.SupabaseSyncService.pushTicketToSupabase(ticket) { success ->
+        com.example.data.supabase.SupabaseSyncService.pushTicketToSupabase(ticket, showtimeUuid) { success ->
             // Đã lưu vé lên Supabase backend thành công
         }
     }
@@ -304,34 +304,16 @@ class MovieRepository(
 
     suspend fun syncTicketsFromSupabase() = withContext(Dispatchers.IO) {
         com.example.data.supabase.SupabaseSyncService.fetchTicketsFromSupabase { remoteTickets ->
-            if (remoteTickets.isNotEmpty()) {
-                val deletedBarcodes = prefs?.getStringSet("deleted_ticket_barcodes", emptySet()) ?: emptySet()
-                val clearedTimestamp = prefs?.getLong("tickets_cleared_timestamp", 0L) ?: 0L
-
-                // Lọc bỏ tất cả các vé đã từng bị người dùng bấm xóa, vé cũ trước thời điểm xóa, hoặc vé lỗi/rác
-                val validTickets = remoteTickets.filter { ticket ->
-                    val isDeleted = deletedBarcodes.contains(ticket.barcode) || 
-                                    (ticket.bookingCode.isNotBlank() && deletedBarcodes.contains(ticket.bookingCode))
-                    val isOldCleared = clearedTimestamp > 0L && ticket.timestamp <= clearedTimestamp
-                    val isInvalid = ticket.movieTitle.isBlank() || ticket.movieTitle == "Phim Chiếu Rạp" || ticket.movieTitle == "Phim"
-                    !isDeleted && !isOldCleared && !isInvalid
-                }
-
-                if (validTickets.isNotEmpty()) {
-                    CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            for (ticket in validTickets) {
-                                if (ticket.barcode.isNotBlank()) {
-                                    val existing = cinemaDao.getTicketByBarcode(ticket.barcode)
-                                    if (existing == null) {
-                                        cinemaDao.insertTicket(ticket)
-                                    }
-                                }
-                            }
-                        } catch (e: Throwable) {
-                            android.util.Log.e("MovieRepository", "Error saving synced tickets to Room: ${e.message}")
-                        }
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    // Xóa sạch tất cả vé cũ trong Room DB để đảm bảo 100% dữ liệu chính xác từ Database Supabase
+                    cinemaDao.deleteAllTickets()
+                    for (ticket in remoteTickets) {
+                        cinemaDao.insertTicket(ticket)
                     }
+                    android.util.Log.d("MovieRepository", "Đã đồng bộ ${remoteTickets.size} vé chính xác 100% từ Database Supabase vào Room DB!")
+                } catch (e: Throwable) {
+                    android.util.Log.e("MovieRepository", "Error saving synced tickets to Room: ${e.message}")
                 }
             }
         }

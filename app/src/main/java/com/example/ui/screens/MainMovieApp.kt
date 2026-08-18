@@ -1805,6 +1805,11 @@ fun BookingFlowScreen(
 
     if (movie == null) return
 
+    LaunchedEffect(movie?.id, date, time) {
+        viewModel.loadShowtimesAndBookingsFromSupabase()
+        viewModel.loadProductsFromSupabase()
+    }
+
     val totalAmount by viewModel.totalPrice.collectAsStateWithLifecycle()
 
     Column(
@@ -2415,10 +2420,10 @@ fun BookingFlowScreen(
                 ) {
                     if (availableProducts.isEmpty()) {
                         Text(
-                            text = "Đang tải bắp nước từ cơ sở dữ liệu...",
+                            text = "Rạp hiện chưa mở bán combo bắp nước trực tuyến trên CSDL.",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 8.dp)
+                            modifier = Modifier.padding(vertical = 6.dp)
                         )
                     } else {
                         availableProducts.forEach { product ->
@@ -3307,11 +3312,8 @@ fun BookingFlowScreen(
 @Composable
 fun TicketsScreen(viewModel: MovieViewModel) {
     val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
-    val tickets by viewModel.tickets.collectAsStateWithLifecycle()
+    val myTickets by viewModel.myTickets.collectAsStateWithLifecycle()
     val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
-
-    // Hiển thị đầy đủ tất cả vé đã đặt trên thiết bị, không ẩn hay lọc mất vé
-    val myTickets = tickets
 
     var selectedTicketForEnlarge by remember { mutableStateOf<Ticket?>(null) }
     var ticketToDelete by remember { mutableStateOf<Ticket?>(null) }
@@ -3381,35 +3383,45 @@ fun TicketsScreen(viewModel: MovieViewModel) {
             }
         }
 
-        if (!isLoggedIn && myTickets.isNotEmpty()) {
-            Surface(
-                color = MomoPrimary.copy(alpha = 0.12f),
-                modifier = Modifier.fillMaxWidth()
+        if (!isLoggedIn) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                Icon(
+                    imageVector = Icons.Rounded.AccountCircle,
+                    contentDescription = "Chưa đăng nhập",
+                    tint = MomoPrimary.copy(alpha = 0.8f),
+                    modifier = Modifier.size(80.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Chưa Đăng Nhập Tài Khoản",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Vui lòng đăng nhập tài khoản để xem lại toàn bộ lịch sử vé xem phim và tích điểm thưởng Neon Club nhé!",
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Button(
+                    onClick = { viewModel.selectTab(4) },
+                    colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary),
+                    modifier = Modifier.testTag("login_from_tickets_button")
                 ) {
-                    Text(
-                        text = "💡 Đăng nhập để tích lũy điểm thưởng Neon Club",
-                        fontSize = 12.sp,
-                        color = MomoPrimary,
-                        fontWeight = FontWeight.Medium
-                    )
-                    TextButton(
-                        onClick = { viewModel.selectTab(4) },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text("Đăng nhập", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MomoPrimary)
-                    }
+                    Text("Đăng Nhập / Đăng Ký Ngay", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             }
-        }
-
-        if (myTickets.isEmpty()) {
+        } else if (myTickets.isEmpty()) {
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -3441,7 +3453,8 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                 Spacer(modifier = Modifier.height(20.dp))
                 Button(
                     onClick = { viewModel.selectTab(0) },
-                    colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MomoPrimary),
+                    modifier = Modifier.testTag("book_now_from_tickets_button")
                 ) {
                     Text("Đặt Vé Ngay", color = Color.White, fontWeight = FontWeight.Bold)
                 }

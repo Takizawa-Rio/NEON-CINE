@@ -93,7 +93,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     // Danh sách vé vừa đặt trực tiếp trên phiên hiện tại để đảm bảo hiển thị tức thì 0ms
     private val _localCreatedTickets = MutableStateFlow<List<Ticket>>(emptyList())
 
-    // Lịch sử vé đã đặt (kết hợp Room Database và bộ nhớ đệm tức thì)
+    // Lịch sử vé đã đặt (kết hợp Room Database và bộ nhớ đệm tức thì - dùng cho kiểm tra ghế & đồng bộ)
     val tickets: StateFlow<List<Ticket>> = combine(
         repository.allTickets,
         _localCreatedTickets
@@ -183,6 +183,39 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _userAvatarUrl = MutableStateFlow("")
     val userAvatarUrl: StateFlow<String> = _userAvatarUrl.asStateFlow()
+
+    // Danh sách vé thuộc riêng tài khoản hiện tại (phân quyền theo account, ẩn hoàn toàn khi chưa đăng nhập)
+    val myTickets: StateFlow<List<Ticket>> = combine(
+        tickets,
+        _userEmail,
+        _userName,
+        _isLoggedIn,
+        _localCreatedTickets
+    ) { allTickets, email, name, loggedIn, localCreated ->
+        if (!loggedIn || email.isBlank()) {
+            return@combine emptyList()
+        }
+        val emailLower = email.trim().lowercase()
+        val emailPrefix = if (emailLower.contains("@")) emailLower.substringBefore("@") else emailLower
+        val nameClean = name.trim().lowercase().replace(" ", "")
+
+        allTickets.filter { t ->
+            val tEmail = t.userEmail.trim().lowercase()
+            val tName = t.userName.trim().lowercase().replace(" ", "")
+            val isEmailMatch = emailLower.isNotEmpty() && (tEmail == emailLower || (emailPrefix.isNotEmpty() && tEmail.contains(emailPrefix)))
+            val isNameMatch = nameClean.isNotEmpty() && (tName.isNotEmpty() && (tName == nameClean || tName.contains(nameClean) || nameClean.contains(tName)))
+            val isLocalCreated = localCreated.any { 
+                (it.barcode == t.barcode || (it.bookingCode.isNotEmpty() && it.bookingCode == t.bookingCode)) &&
+                (it.userEmail.isBlank() || it.userEmail.equals(emailLower, ignoreCase = true))
+            }
+            
+            isEmailMatch || isNameMatch || isLocalCreated
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = emptyList()
+    )
 
     private val _userPoints = MutableStateFlow(150) // Điểm tích lũy thành viên Neon Club
     val userPoints: StateFlow<Int> = _userPoints.asStateFlow()
@@ -550,18 +583,23 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
         val rawSeatStrings = mutableListOf<String>()
 
-        // 1. Lọc ghế từ danh sách vé (Tickets)
+        fun cleanText(s: String): String = s.replace(Regex("""[^a-zA-Z0-9\u00C0-\u1EF9]"""), "").lowercase()
+        val movieTitleClean = cleanText(movie.title)
+
+        // 1. Lọc ghế từ danh sách vé (Tickets từ DB/Room/Supabase)
         for (ticket in allTickets) {
+            val ticketTitleClean = cleanText(ticket.movieTitle)
             val movieMatches = (ticket.movieId > 0 && ticket.movieId == movie.id) ||
                 (ticket.movieTitle.isNotBlank() && (
                     ticket.movieTitle.equals(movie.title, ignoreCase = true) ||
                     ticket.movieTitle.contains(movie.title, ignoreCase = true) ||
                     movie.title.contains(ticket.movieTitle, ignoreCase = true) ||
+                    (movieTitleClean.isNotEmpty() && ticketTitleClean.isNotEmpty() && (movieTitleClean.contains(ticketTitleClean) || ticketTitleClean.contains(movieTitleClean))) ||
                     (movie.stringId.isNotEmpty() && (ticket.movieTitle.contains(movie.stringId, ignoreCase = true) || ticket.movieTitle == movie.stringId))
                 ))
             val cinemaMatches = isCinemaMatch(ticket.cinema, cinema)
-            val dateMatches = isDateMatch(ticket.dateTime, date)
-            val timeMatches = isTimeMatch(ticket.dateTime, time)
+            val dateMatches = ticket.dateTime.isBlank() || isDateMatch(ticket.dateTime, date)
+            val timeMatches = ticket.dateTime.isBlank() || isTimeMatch(ticket.dateTime, time)
 
             if (movieMatches && cinemaMatches && dateMatches && timeMatches) {
                 rawSeatStrings.add(ticket.seats)
@@ -570,7 +608,14 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
         // 2. Lọc ghế từ danh sách Bookings trên Supabase
         for (booking in allBookings) {
-            val matchedShowtime = allShowtimes.find { it.id == booking.showtimeId }
+            val matchedShowtime = allShowtimes.find { 
+                (booking.showtimeId > 0 && it.id == booking.showtimeId) ||
+                (booking.showtimeUuid.isNotBlank() && (
+                    it.uuid.equals(booking.showtimeUuid, ignoreCase = true) ||
+                    it.id.toString() == booking.showtimeUuid ||
+                    it.roomId.equals(booking.showtimeUuid, ignoreCase = true)
+                ))
+            }
             val isBookingForCurrentShow: Boolean
             if (matchedShowtime != null) {
                 val mMatch = (matchedShowtime.movieId > 0 && matchedShowtime.movieId == movie.id) ||
@@ -584,7 +629,22 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
                 val tMatch = isTimeMatch(matchedShowtime.startTime, time)
                 isBookingForCurrentShow = mMatch && dMatch && tMatch
             } else {
-                isBookingForCurrentShow = (booking.movieId > 0 && booking.movieId == movie.id) || booking.movieId == 0
+                val bookingTitleClean = cleanText(booking.movieTitle)
+                val mMatch = (booking.movieId > 0 && booking.movieId == movie.id) ||
+                    (movie.stringId.isNotEmpty() && (booking.movieStringId == movie.stringId || booking.movieStringId == "FILM_${movie.id}" || booking.movieStringId == "${movie.id}")) ||
+                    (booking.movieTitle.isNotBlank() && (
+                        booking.movieTitle.equals(movie.title, ignoreCase = true) ||
+                        booking.movieTitle.contains(movie.title, ignoreCase = true) ||
+                        movie.title.contains(booking.movieTitle, ignoreCase = true) ||
+                        (movieTitleClean.isNotEmpty() && bookingTitleClean.isNotEmpty() && (movieTitleClean.contains(bookingTitleClean) || bookingTitleClean.contains(movieTitleClean)))
+                    )) ||
+                    (booking.movieId == 0 && booking.movieTitle.isBlank()) // Booking chung
+                
+                val dMatch = booking.date.isBlank() || isDateMatch(booking.date, date)
+                val tMatch = booking.time.isBlank() || isTimeMatch(booking.time, time)
+                val cMatch = booking.cinema.isBlank() || isCinemaMatch(booking.cinema, cinema)
+
+                isBookingForCurrentShow = mMatch && dMatch && tMatch && cMatch
             }
 
             if (isBookingForCurrentShow && booking.seats.isNotBlank()) {
@@ -712,7 +772,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     // Số lượng sản phẩm / combo đã chọn (productId -> quantity)
-    private val _products = MutableStateFlow<List<com.example.data.model.Product>>(defaultProducts)
+    private val _products = MutableStateFlow<List<com.example.data.model.Product>>(emptyList())
     val products: StateFlow<List<com.example.data.model.Product>> = _products.asStateFlow()
 
     private val _selectedProductsMap = MutableStateFlow<Map<Int, Int>>(emptyMap())
@@ -795,6 +855,19 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             val sdf = SimpleDateFormat("dd/MM", Locale.getDefault())
             _selectedDate.value = sdf.format(Date())
 
+            // Tự động gỡ bỏ các ghế đã bị đặt nếu người dùng đang chọn trùng ghế đó
+            viewModelScope.launch {
+                bookedSeats.collect { booked ->
+                    if (booked.isNotEmpty()) {
+                        val current = _selectedSeats.value
+                        val valid = current.filter { !isSeatBooked(it) }.toSet()
+                        if (valid.size != current.size) {
+                            _selectedSeats.value = valid
+                        }
+                    }
+                }
+            }
+
             // Đồng bộ phim, suất chiếu, chỗ ngồi & combo bắp nước từ Supabase
             try {
                 loadProductsFromSupabase()
@@ -819,15 +892,18 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadProductsFromSupabase() {
         com.example.data.supabase.SupabaseSyncService.fetchProductsFromSupabase { list ->
-            if (list.isNotEmpty()) {
-                _products.value = list
-            } else {
-                _products.value = defaultProducts
-            }
+            _products.value = list
         }
     }
 
     fun loadShowtimesAndBookingsFromSupabase() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.syncTicketsFromSupabase()
+            } catch (e: Exception) {
+                android.util.Log.e("MovieViewModel", "Error syncing tickets: ${e.message}")
+            }
+        }
         com.example.data.supabase.SupabaseSyncService.fetchShowtimesFromSupabase { list ->
             if (list.isNotEmpty()) {
                 _showtimes.value = list
@@ -1198,11 +1274,13 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             if (movieTimes.isNotEmpty()) movieTimes else defaultShowtimeSlots
         } else defaultShowtimeSlots
         _selectedTime.value = slots.firstOrNull() ?: "19:00"
+        loadShowtimesAndBookingsFromSupabase()
     }
 
     fun selectTime(time: String) {
         _selectedTime.value = time
         _selectedSeats.value = emptySet() // Reset selected seats when time changes
+        loadShowtimesAndBookingsFromSupabase()
     }
 
     fun toggleSeat(seat: String) {
@@ -1570,9 +1648,16 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         _lastCreatedTicket.value = ticket
         _localCreatedTickets.value = listOf(ticket) + _localCreatedTickets.value
 
+        val matchedShowtime = _showtimes.value.find {
+            (it.movieId == movie.id || (movie.stringId.isNotEmpty() && (it.movieStringId == movie.stringId || it.movieStringId == "FILM_${movie.id}" || it.movieStringId == "${movie.id}")) || (it.movieTitle.isNotBlank() && it.movieTitle.equals(movie.title, ignoreCase = true))) &&
+            (it.date.isBlank() || it.date == dateVal || isDateMatch(it.date, dateVal)) &&
+            (it.startTime.isBlank() || it.startTime == timeVal || isTimeMatch(it.startTime, timeVal))
+        }
+        val actualShowtimeUuid = matchedShowtime?.uuid?.ifBlank { matchedShowtime.id.toString() } ?: "07e17f5e-9ce6-41b0-961c-ff366befd854"
+
         viewModelScope.launch {
             try {
-                repository.bookTicket(ticket)
+                repository.bookTicket(ticket, actualShowtimeUuid)
                 addNotification(
                     title = "🎟️ Đặt vé thành công - Mã: $bookingCode",
                     message = "Vé phim ${movie.title} tại $cinemaName, suất $dateVal lúc $timeVal. Ghế chọn: $seatsStr. Mã đặt vé: $bookingCode (Mã vạch: $barcode)",

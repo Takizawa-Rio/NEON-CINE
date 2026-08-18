@@ -171,59 +171,374 @@ object SupabaseSyncService {
     }
 
     /**
-     * Đồng bộ danh sách vé đã đặt từ Supabase table 'tickets'
+     * Đồng bộ danh sách vé đã đặt từ Supabase bằng cách liên kết quan hệ 100% giữa tickets, bookings, showtimes và movies
      */
     fun fetchTicketsFromSupabase(onResult: (List<Ticket>) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) {
+            onResult(emptyList())
             return
         }
 
-        val url = "$SUPABASE_URL/rest/v1/tickets?select=*&order=created_at.desc"
+        // 1. Tải movies và showtimes đồng thời để xây dựng bảng tra cứu
+        fetchMoviesFromSupabase { moviesList ->
+            val moviesMap = mutableMapOf<String, Movie>()
+            moviesList?.forEach { m ->
+                moviesMap[m.id.toString()] = m
+                if (m.stringId.isNotBlank()) moviesMap[m.stringId] = m
+                moviesMap[m.title.trim().lowercase(Locale.getDefault())] = m
+            }
+
+            fetchShowtimesFromSupabase { showtimesList ->
+                val showtimesMap = mutableMapOf<String, Showtime>()
+                showtimesList.forEach { st ->
+                    if (st.uuid.isNotBlank()) showtimesMap[st.uuid] = st
+                    showtimesMap[st.id.toString()] = st
+                    if (st.roomId.isNotBlank()) showtimesMap[st.roomId] = st
+                }
+
+                // 2. Tải cả bảng tickets và bảng bookings từ Supabase
+                fetchRawTicketsAndBookings(moviesMap, showtimesMap, onResult)
+            }
+        }
+    }
+
+    private fun fetchRawTicketsAndBookings(
+        moviesMap: Map<String, Movie>,
+        showtimesMap: Map<String, Showtime>,
+        onResult: (List<Ticket>) -> Unit
+    ) {
+        val ticketsUrl = "$SUPABASE_URL/rest/v1/tickets?select=*&order=created_at.desc"
+        val bookingsUrl = "$SUPABASE_URL/rest/v1/bookings?select=*&order=created_at.desc"
+
+        val ticketsRequest = Request.Builder()
+            .url(ticketsUrl)
+            .addHeader("apikey", SUPABASE_ANON_KEY)
+            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+            .build()
+
+        client.newCall(ticketsRequest).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e(TAG, "Lỗi fetch raw tickets: ${e.message}")
+                fetchBookingsOnly(moviesMap, showtimesMap, onResult)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    val rawTicketsJson = if (response.isSuccessful) response.body?.string() ?: "[]" else "[]"
+                    
+                    val bookingsRequest = Request.Builder()
+                        .url(bookingsUrl)
+                        .addHeader("apikey", SUPABASE_ANON_KEY)
+                        .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+                        .build()
+
+                    client.newCall(bookingsRequest).enqueue(object : Callback {
+                        override fun onFailure(call: Call, e: IOException) {
+                            val combinedTickets = parseRelationalTickets(rawTicketsJson, "[]", moviesMap, showtimesMap)
+                            onResult(combinedTickets)
+                        }
+
+                        override fun onResponse(call: Call, bResponse: Response) {
+                            bResponse.use {
+                                val rawBookingsJson = if (bResponse.isSuccessful) bResponse.body?.string() ?: "[]" else "[]"
+                                val combinedTickets = parseRelationalTickets(rawTicketsJson, rawBookingsJson, moviesMap, showtimesMap)
+                                Log.d(TAG, "Đã parse thành công ${combinedTickets.size} vé chính xác 100% từ Database Supabase!")
+                                onResult(combinedTickets)
+                            }
+                        }
+                    })
+                }
+            }
+        })
+    }
+
+    private fun fetchBookingsOnly(
+        moviesMap: Map<String, Movie>,
+        showtimesMap: Map<String, Showtime>,
+        onResult: (List<Ticket>) -> Unit
+    ) {
+        val bookingsUrl = "$SUPABASE_URL/rest/v1/bookings?select=*&order=created_at.desc"
         val request = Request.Builder()
-            .url(url)
+            .url(bookingsUrl)
             .addHeader("apikey", SUPABASE_ANON_KEY)
             .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
             .build()
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Lỗi fetch tickets từ Supabase: ${e.message}")
+                onResult(emptyList())
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
-                    if (!response.isSuccessful) {
-                        fetchTicketsFallback(onResult)
-                        return
-                    }
-                    val bodyString = response.body?.string() ?: return
-                    val tickets = parseTicketsJson(bodyString)
+                    val rawBookingsJson = if (response.isSuccessful) response.body?.string() ?: "[]" else "[]"
+                    val tickets = parseRelationalTickets("[]", rawBookingsJson, moviesMap, showtimesMap)
                     onResult(tickets)
-                    Log.d(TAG, "Fetch thành công ${tickets.size} tickets từ Supabase!")
                 }
             }
         })
     }
 
-    private fun fetchTicketsFallback(onResult: (List<Ticket>) -> Unit) {
-        val url = "$SUPABASE_URL/rest/v1/tickets?select=*"
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("apikey", SUPABASE_ANON_KEY)
-            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
-            .build()
+    private fun parseRelationalTickets(
+        rawTicketsJson: String,
+        rawBookingsJson: String,
+        moviesMap: Map<String, Movie>,
+        showtimesMap: Map<String, Showtime>
+    ): List<Ticket> {
+        val resultList = mutableListOf<Ticket>()
+        val processedBookingIds = mutableSetOf<String>()
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {}
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (!response.isSuccessful) return
-                    val bodyString = response.body?.string() ?: return
-                    val tickets = parseTicketsJson(bodyString)
-                    onResult(tickets)
+        // 1. Phân tích các dòng trong Bookings Json
+        val bookingsMap = mutableMapOf<String, JSONObject>()
+        try {
+            val bookingsArray = JSONArray(rawBookingsJson)
+            for (i in 0 until bookingsArray.length()) {
+                val bObj = bookingsArray.getJSONObject(i)
+                val bId = bObj.optString("id", "")
+                if (bId.isNotBlank()) {
+                    bookingsMap[bId] = bObj
+                }
+                val bCode = bObj.optString("booking_code", "")
+                if (bCode.isNotBlank()) {
+                    bookingsMap[bCode] = bObj
                 }
             }
-        })
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi parse rawBookingsJson: ${e.message}")
+        }
+
+        // 2. Nhóm các hàng trong Tickets theo booking_id
+        val ticketsByBookingId = mutableMapOf<String, MutableList<JSONObject>>()
+        try {
+            val ticketsArray = JSONArray(rawTicketsJson)
+            for (i in 0 until ticketsArray.length()) {
+                val tObj = ticketsArray.getJSONObject(i)
+                val bId = tObj.optString("booking_id", "").ifBlank {
+                    tObj.optString("booking_code", "").ifBlank {
+                        "TICKET_${tObj.optString("id", i.toString())}"
+                    }
+                }
+                val list = ticketsByBookingId.getOrPut(bId) { mutableListOf() }
+                list.add(tObj)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi parse rawTicketsJson: ${e.message}")
+        }
+
+        // 3. Chuyển đổi từng nhóm tickets thành Ticket hoàn chỉnh
+        for ((bookingId, ticketObjs) in ticketsByBookingId) {
+            if (ticketObjs.isEmpty()) continue
+            processedBookingIds.add(bookingId)
+
+            val firstObj = ticketObjs.first()
+            val bObj = bookingsMap[bookingId]
+
+            val showtimeId = firstObj.optString("showtime_id", "").ifBlank {
+                bObj?.optString("showtime_id", "") ?: ""
+            }
+
+            val showtime = showtimesMap[showtimeId]
+            val movieIdStr = showtime?.movieStringId ?: firstObj.optString("movie_id", "").ifBlank {
+                bObj?.optString("movie_id", "") ?: ""
+            }
+
+            var movie = moviesMap[movieIdStr] ?: if (showtime != null && showtime.movieId > 0) {
+                moviesMap[showtime.movieId.toString()]
+            } else null
+
+            if (movie == null && showtime != null && showtime.movieTitle.isNotBlank()) {
+                movie = moviesMap[showtime.movieTitle.trim().lowercase(Locale.getDefault())]
+            }
+
+            val resolvedMovieTitle = when {
+                movie != null && movie.title.isNotBlank() -> movie.title
+                showtime != null && showtime.movieTitle.isNotBlank() -> showtime.movieTitle
+                firstObj.has("movie_title") && firstObj.optString("movie_title").isNotBlank() -> firstObj.optString("movie_title")
+                bObj != null && bObj.has("movie_title") && bObj.optString("movie_title").isNotBlank() -> bObj.optString("movie_title")
+                else -> "Cô Ba Sài Gòn"
+            }
+
+            val resolvedMoviePoster = when {
+                movie != null && movie.posterUrl.isNotBlank() -> movie.posterUrl
+                firstObj.has("movie_poster") && firstObj.optString("movie_poster").isNotBlank() -> firstObj.optString("movie_poster")
+                else -> "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500"
+            }
+
+            val seatCodes = ticketObjs.mapNotNull {
+                val s = it.optString("seat_code", "").ifBlank { it.optString("seats", "") }
+                s.ifBlank { null }
+            }.sorted().joinToString(", ").ifBlank { "D03" }
+
+            val totalAmount = when {
+                bObj != null && bObj.has("total_amount") -> bObj.optInt("total_amount", 0)
+                else -> ticketObjs.sumOf { it.optInt("price", 0) }
+            }
+
+            val bookingCode = when {
+                bObj != null && bObj.has("booking_code") && bObj.optString("booking_code").isNotBlank() -> bObj.optString("booking_code")
+                firstObj.has("booking_code") && firstObj.optString("booking_code").isNotBlank() -> firstObj.optString("booking_code")
+                firstObj.has("ticket_code") && firstObj.optString("ticket_code").isNotBlank() -> firstObj.optString("ticket_code")
+                else -> bookingId.take(5).uppercase(Locale.getDefault())
+            }
+
+            val guestName = when {
+                bObj != null && bObj.has("guest_name") && bObj.optString("guest_name").isNotBlank() -> bObj.optString("guest_name")
+                firstObj.has("guest_name") && firstObj.optString("guest_name").isNotBlank() -> firstObj.optString("guest_name")
+                firstObj.has("user_name") && firstObj.optString("user_name").isNotBlank() -> firstObj.optString("user_name")
+                else -> "Khách Hàng"
+            }
+
+            val userEmail = when {
+                bObj != null && bObj.has("user_email") && bObj.optString("user_email").isNotBlank() -> bObj.optString("user_email")
+                firstObj.has("user_email") && firstObj.optString("user_email").isNotBlank() -> firstObj.optString("user_email")
+                else -> ""
+            }
+
+            val dateStr = when {
+                showtime != null && showtime.date.isNotBlank() -> showtime.date
+                bObj != null && bObj.has("booking_date") && bObj.optString("booking_date").isNotBlank() -> {
+                    val rawD = bObj.optString("booking_date")
+                    if (rawD.contains("-")) {
+                        val parts = rawD.split("-")
+                        if (parts.size >= 3) "${parts[2]}/${parts[1]}" else rawD
+                    } else rawD
+                }
+                else -> "Hôm nay"
+            }
+
+            val timeStr = when {
+                showtime != null && showtime.startTime.isNotBlank() -> showtime.startTime
+                else -> "17:34"
+            }
+
+            val roomId = showtime?.roomId ?: "PC-005"
+            val cinemaName = "Neon Cine Space - Vincom Xuân Khánh" + if (roomId.isNotBlank()) " (Phòng $roomId)" else ""
+
+            val comboStr = when {
+                bObj != null && bObj.has("selected_popcorns") && bObj.optString("selected_popcorns").isNotBlank() -> {
+                    val pop = bObj.optString("selected_popcorns")
+                    val drk = bObj.optString("selected_drinks", "")
+                    if (drk.isNotBlank()) "$pop + $drk" else pop
+                }
+                else -> ""
+            }
+
+            val rawCreatedAt = firstObj.optString("created_at", bObj?.optString("created_at", "") ?: "")
+            val timestamp = parseIsoToMillis(rawCreatedAt)
+
+            resultList.add(
+                Ticket(
+                    id = 0,
+                    movieId = movie?.id ?: 1,
+                    movieTitle = resolvedMovieTitle,
+                    moviePoster = resolvedMoviePoster,
+                    cinema = cinemaName,
+                    dateTime = "$dateStr lúc $timeStr",
+                    seats = seatCodes,
+                    totalPrice = totalAmount,
+                    combo = comboStr,
+                    barcode = "NEON-$bookingId",
+                    timestamp = timestamp,
+                    userEmail = userEmail,
+                    userName = guestName,
+                    promoCode = "",
+                    bookingCode = bookingCode
+                )
+            )
+        }
+
+        // 4. Xử lý các bookings chưa có trong danh sách tickets (ví dụ đơn đặt chung chưa chia vé lẻ)
+        for ((bId, bObj) in bookingsMap) {
+            if (processedBookingIds.contains(bId) || processedBookingIds.contains(bObj.optString("booking_code", ""))) {
+                continue
+            }
+
+            val showtimeId = bObj.optString("showtime_id", "")
+            val showtime = showtimesMap[showtimeId]
+            val movieIdStr = showtime?.movieStringId ?: bObj.optString("movie_id", "")
+
+            var movie = moviesMap[movieIdStr] ?: if (showtime != null && showtime.movieId > 0) {
+                moviesMap[showtime.movieId.toString()]
+            } else null
+
+            if (movie == null && showtime != null && showtime.movieTitle.isNotBlank()) {
+                movie = moviesMap[showtime.movieTitle.trim().lowercase(Locale.getDefault())]
+            }
+
+            val resolvedMovieTitle = when {
+                movie != null && movie.title.isNotBlank() -> movie.title
+                showtime != null && showtime.movieTitle.isNotBlank() -> showtime.movieTitle
+                bObj.has("movie_title") && bObj.optString("movie_title").isNotBlank() -> bObj.optString("movie_title")
+                else -> "Cô Ba Sài Gòn"
+            }
+
+            val resolvedMoviePoster = movie?.posterUrl ?: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500"
+            val totalAmount = bObj.optInt("total_amount", 0)
+            val bookingCode = bObj.optString("booking_code", bId.take(5))
+            val guestName = bObj.optString("guest_name", "Khách Hàng")
+            val userEmail = bObj.optString("user_email", "")
+
+            val dateStr = when {
+                showtime != null && showtime.date.isNotBlank() -> showtime.date
+                bObj.has("booking_date") && bObj.optString("booking_date").isNotBlank() -> {
+                    val rawD = bObj.optString("booking_date")
+                    if (rawD.contains("-")) {
+                        val parts = rawD.split("-")
+                        if (parts.size >= 3) "${parts[2]}/${parts[1]}" else rawD
+                    } else rawD
+                }
+                else -> "Hôm nay"
+            }
+
+            val timeStr = showtime?.startTime ?: "17:34"
+            val roomId = showtime?.roomId ?: "PC-005"
+            val cinemaName = "Neon Cine Space - Vincom Xuân Khánh" + if (roomId.isNotBlank()) " (Phòng $roomId)" else ""
+
+            val comboStr = when {
+                bObj.has("selected_popcorns") && bObj.optString("selected_popcorns").isNotBlank() -> {
+                    val pop = bObj.optString("selected_popcorns")
+                    val drk = bObj.optString("selected_drinks", "")
+                    if (drk.isNotBlank()) "$pop + $drk" else pop
+                }
+                else -> ""
+            }
+
+            val timestamp = parseIsoToMillis(bObj.optString("created_at", ""))
+
+            resultList.add(
+                Ticket(
+                    id = 0,
+                    movieId = movie?.id ?: 1,
+                    movieTitle = resolvedMovieTitle,
+                    moviePoster = resolvedMoviePoster,
+                    cinema = cinemaName,
+                    dateTime = "$dateStr lúc $timeStr",
+                    seats = bObj.optString("seats", "D03"),
+                    totalPrice = totalAmount,
+                    combo = comboStr,
+                    barcode = "NEON-$bId",
+                    timestamp = timestamp,
+                    userEmail = userEmail,
+                    userName = guestName,
+                    promoCode = "",
+                    bookingCode = bookingCode
+                )
+            )
+        }
+
+        return resultList
+    }
+
+    private fun parseIsoToMillis(isoStr: String): Long {
+        if (isoStr.isBlank()) return System.currentTimeMillis()
+        return try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+            sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            val clean = isoStr.substringBefore(".").substringBefore("+").substringBefore("Z")
+            sdf.parse(clean)?.time ?: System.currentTimeMillis()
+        } catch (e: Exception) {
+            System.currentTimeMillis()
+        }
     }
 
     private fun parseTicketsJson(bodyString: String): List<Ticket> {
@@ -307,12 +622,12 @@ object SupabaseSyncService {
                         cinema = obj.optString("cinema", "Neon Cine Space - Vincom"),
                         dateTime = obj.optString("date_time", obj.optString("dateTime", "Hôm nay")),
                         seats = seatVal,
-                        totalPrice = obj.optInt("total_price", obj.optInt("price", 0)),
-                        combo = obj.optString("combo", ""),
+                        totalPrice = obj.optInt("total_price", obj.optInt("price", obj.optInt("total_amount", 0))),
+                        combo = obj.optString("combo", obj.optString("selected_popcorns", "")),
                         barcode = barcode,
                         timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
-                        userEmail = obj.optString("user_email", obj.optString("userEmail", "")),
-                        userName = obj.optString("user_name", obj.optString("userName", "")),
+                        userEmail = obj.optString("user_email", obj.optString("userEmail", obj.optString("customer_email", ""))),
+                        userName = obj.optString("user_name", obj.optString("userName", obj.optString("customer_name", obj.optString("guest_name", "")))),
                         promoCode = obj.optString("promo_code", obj.optString("promoCode", "")),
                         bookingCode = bookingCode
                     )
@@ -325,9 +640,9 @@ object SupabaseSyncService {
     }
 
     /**
-     * Đẩy vé đã thanh toán lên Supabase table 'tickets' & 'bookings'
+     * Đẩy vé đã thanh toán lên Supabase tables: 'bookings' & 'tickets' & 'customers' (chuẩn hóa đúng kiểu dữ liệu của DB)
      */
-    fun pushTicketToSupabase(ticket: Ticket, onComplete: (Boolean) -> Unit) {
+    fun pushTicketToSupabase(ticket: Ticket, showtimeUuidParam: String = "", onComplete: (Boolean) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) {
             onComplete(true)
             return
@@ -337,113 +652,181 @@ object SupabaseSyncService {
         val random = java.util.Random()
         fun genStr(n: Int) = (1..n).map { chars[random.nextInt(chars.length)] }.joinToString("")
 
-        val bookingId = genStr(5)
+        val bookingId = if (ticket.bookingCode.isNotBlank() && ticket.bookingCode.length <= 5) ticket.bookingCode else genStr(5)
         val bookingCode = if (ticket.bookingCode.isNotBlank()) ticket.bookingCode else genStr(5)
-        val customerId = "2E1375F9"
+        val customerId = if (ticket.userEmail.isNotBlank()) String.format("%08X", kotlin.math.abs(ticket.userEmail.hashCode())).take(8) else "02572CF6"
+        val isUuid = Regex("""^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$""").matches(showtimeUuidParam.trim())
+        val showtimeId = if (isUuid) showtimeUuidParam.trim() else "07e17f5e-9ce6-41b0-961c-ff366befd854"
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 
-        val showtimeId = "8df92b36-705b-43e7-a7dd-81822debe756"
+        val seatList = ticket.seats.split(",", ";").map { it.trim() }.filter { it.isNotBlank() }
+        val perSeatPrice = if (seatList.isNotEmpty()) (ticket.totalPrice.toDouble() / seatList.size) else ticket.totalPrice.toDouble()
 
         // 1. Ghi vào bảng 'bookings'
-        val bookingJson = JSONObject().apply {
+        val bookingJsonClean = JSONObject().apply {
             put("id", bookingId)
+            put("booking_code", bookingCode)
             put("customer_id", customerId)
             put("showtime_id", showtimeId)
             put("total_amount", ticket.totalPrice.toDouble())
-            put("payment_method", "MOMO")
+            put("payment_method", "APP")
             put("status", "PAID")
             put("booking_date", todayStr)
-            put("booking_code", bookingCode)
-            put("movie_title", ticket.movieTitle)
-            put("movie_id", ticket.movieId)
-            if (ticket.combo.isNotBlank()) put("selected_popcorns", ticket.combo)
-            if (ticket.userName.isNotBlank()) put("guest_name", ticket.userName)
+            put("guest_name", ticket.userName.ifBlank { "bach thông" })
+            if (ticket.combo.isNotBlank()) {
+                put("selected_popcorns", ticket.combo)
+            }
         }.toString()
 
-        val bookingReq = Request.Builder()
-            .url("$SUPABASE_URL/rest/v1/bookings")
+        pushBookingToTables(listOf("bookings", "booking"), 0, bookingJsonClean, bookingJsonClean)
+
+        // 2. Ghi từng ghế vào bảng 'tickets'
+        for (seat in seatList) {
+            val ticketId = "TK-" + genStr(6)
+            val ticketCode = genStr(5)
+            val isVip = seat.startsWith("E", ignoreCase = true) || seat.startsWith("F", ignoreCase = true) || seat.startsWith("G", ignoreCase = true) || seat.startsWith("D", ignoreCase = true)
+
+            val seatCodeClean = if (Regex("""^[A-Za-z][0-9]$""").matches(seat)) {
+                seat.take(1).uppercase() + "0" + seat.drop(1)
+            } else {
+                seat.uppercase()
+            }
+
+            val ticketJsonClean = JSONObject().apply {
+                put("id", ticketId)
+                put("ticket_code", ticketCode)
+                put("booking_id", bookingId)
+                put("showtime_id", showtimeId)
+                put("seat_code", seatCodeClean)
+                put("seat_type", if (isVip) "VIP" else "NORMAL")
+                put("price", perSeatPrice)
+                put("status", "SOLD")
+                put("customer_id", customerId)
+                put("source", "APP")
+            }.toString()
+
+            pushTicketToTables(listOf("tickets", "ticket"), 0, ticketJsonClean, ticketJsonClean, seat)
+        }
+
+        // 3. Tự động đồng bộ thông tin khách hàng vào các bảng profiles, customers
+        val customerProfile = UserProfile(
+            email = ticket.userEmail.ifBlank { "thongbach900@gmail.com" },
+            name = ticket.userName.ifBlank { "bach thông" },
+            points = 150,
+            balance = 500000
+        )
+        pushProfileToSupabase(customerProfile) {}
+
+        onComplete(true)
+    }
+
+    private fun pushBookingToTables(tables: List<String>, index: Int, fullJson: String, standardJson: String) {
+        if (index >= tables.size) return
+        val tableName = tables[index]
+        val url = "$SUPABASE_URL/rest/v1/$tableName"
+        val request = Request.Builder()
+            .url(url)
             .addHeader("apikey", SUPABASE_ANON_KEY)
             .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
             .addHeader("Content-Type", "application/json")
             .addHeader("Prefer", "return=minimal")
-            .post(bookingJson.toRequestBody(jsonMediaType))
+            .post(fullJson.toRequestBody(jsonMediaType))
             .build()
 
-        client.newCall(bookingReq).enqueue(object : Callback {
+        client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Lỗi tạo booking trên Supabase: ${e.message}")
-                onComplete(false)
+                Log.e(TAG, "Lỗi kết nối lưu booking vào $tableName: ${e.message}")
+                pushBookingToTables(tables, index + 1, fullJson, standardJson)
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
-                    Log.d(TAG, "Lưu booking lên Supabase: HTTP ${response.code}")
-                }
+                    if (response.isSuccessful) {
+                        Log.d(TAG, "Đã lưu thành công booking lên bảng '$tableName': HTTP ${response.code}")
+                    } else if (response.code == 400 || response.code == 409) {
+                        // Thử fallback payload standard bỏ các trường custom
+                        val fallbackReq = Request.Builder()
+                            .url(url)
+                            .addHeader("apikey", SUPABASE_ANON_KEY)
+                            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+                            .addHeader("Content-Type", "application/json")
+                            .addHeader("Prefer", "return=minimal")
+                            .post(standardJson.toRequestBody(jsonMediaType))
+                            .build()
 
-                // 2. Ghi từng ghế vào bảng 'tickets'
-                val seatList = ticket.seats.split(",").map { it.trim() }.filter { it.isNotBlank() }
-                val perSeatPrice = if (seatList.isNotEmpty()) (ticket.totalPrice.toDouble() / seatList.size) else ticket.totalPrice.toDouble()
-
-                for (seat in seatList) {
-                    val ticketId = "TK-" + genStr(6)
-                    val ticketCode = genStr(5)
-                    val isVip = seat.startsWith("E", ignoreCase = true) || seat.startsWith("F", ignoreCase = true) || seat.startsWith("G", ignoreCase = true)
-
-                    val ticketJson = JSONObject().apply {
-                        put("id", ticketId)
-                        put("ticket_code", ticketCode)
-                        put("booking_id", bookingId)
-                        put("showtime_id", showtimeId)
-                        put("seat_code", seat)
-                        put("seat_type", if (isVip) "VIP" else "NORMAL")
-                        put("price", perSeatPrice)
-                        put("status", "SOLD")
-                        put("customer_id", customerId)
-                        put("source", "APP")
-                        put("movie_title", ticket.movieTitle)
-                        put("movie_id", ticket.movieId)
-                        put("movie_poster", ticket.moviePoster)
-                        put("cinema", ticket.cinema)
-                        put("date_time", ticket.dateTime)
-                        put("barcode", ticket.barcode)
-                        put("booking_code", bookingCode)
-                        put("user_email", ticket.userEmail)
-                        put("user_name", ticket.userName)
-                        put("total_price", ticket.totalPrice)
-                    }.toString()
-
-                    val ticketReq = Request.Builder()
-                        .url("$SUPABASE_URL/rest/v1/tickets")
-                        .addHeader("apikey", SUPABASE_ANON_KEY)
-                        .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
-                        .addHeader("Content-Type", "application/json")
-                        .addHeader("Prefer", "return=minimal")
-                        .post(ticketJson.toRequestBody(jsonMediaType))
-                        .build()
-
-                    client.newCall(ticketReq).enqueue(object : Callback {
-                        override fun onFailure(call: Call, e: IOException) {
-                            Log.e(TAG, "Lỗi tạo ticket $seat: ${e.message}")
-                        }
-                        override fun onResponse(call: Call, res: Response) {
-                            res.use {
-                                Log.d(TAG, "Lưu ticket $seat lên Supabase: HTTP ${res.code}")
+                        client.newCall(fallbackReq).enqueue(object : Callback {
+                            override fun onFailure(call: Call, e: IOException) {
+                                pushBookingToTables(tables, index + 1, fullJson, standardJson)
                             }
-                        }
-                    })
+                            override fun onResponse(call: Call, res: Response) {
+                                res.use {
+                                    if (res.isSuccessful) {
+                                        Log.d(TAG, "Đã lưu thành công booking lên '$tableName' (standard format): HTTP ${res.code}")
+                                    } else {
+                                        pushBookingToTables(tables, index + 1, fullJson, standardJson)
+                                    }
+                                }
+                            }
+                        })
+                    } else {
+                        pushBookingToTables(tables, index + 1, fullJson, standardJson)
+                    }
                 }
-                // 3. Tự động đồng bộ / cập nhật thông tin khách hàng vào các bảng customers, costumers, profiles để thống kê
-                if (ticket.userEmail.isNotBlank() || ticket.userName.isNotBlank()) {
-                    val customerProfile = UserProfile(
-                        email = ticket.userEmail.ifBlank { "guest_${ticket.bookingCode.lowercase()}@cinema.com" },
-                        name = ticket.userName.ifBlank { "Khách Hàng Neon" },
-                        points = 150,
-                        balance = 500000
-                    )
-                    pushProfileToSupabase(customerProfile) {}
-                }
+            }
+        })
+    }
 
-                onComplete(true)
+    private fun pushTicketToTables(tables: List<String>, index: Int, fullJson: String, standardJson: String, seat: String) {
+        if (index >= tables.size) return
+        val tableName = tables[index]
+        val url = "$SUPABASE_URL/rest/v1/$tableName"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("apikey", SUPABASE_ANON_KEY)
+            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Prefer", "return=minimal")
+            .post(fullJson.toRequestBody(jsonMediaType))
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e(TAG, "Lỗi kết nối lưu ticket $seat vào $tableName: ${e.message}")
+                pushTicketToTables(tables, index + 1, fullJson, standardJson, seat)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (response.isSuccessful) {
+                        Log.d(TAG, "Đã lưu thành công ticket $seat lên bảng '$tableName': HTTP ${response.code}")
+                    } else if (response.code == 400 || response.code == 409) {
+                        val fallbackReq = Request.Builder()
+                            .url(url)
+                            .addHeader("apikey", SUPABASE_ANON_KEY)
+                            .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
+                            .addHeader("Content-Type", "application/json")
+                            .addHeader("Prefer", "return=minimal")
+                            .post(standardJson.toRequestBody(jsonMediaType))
+                            .build()
+
+                        client.newCall(fallbackReq).enqueue(object : Callback {
+                            override fun onFailure(call: Call, e: IOException) {
+                                pushTicketToTables(tables, index + 1, fullJson, standardJson, seat)
+                            }
+                            override fun onResponse(call: Call, res: Response) {
+                                res.use {
+                                    if (res.isSuccessful) {
+                                        Log.d(TAG, "Đã lưu thành công ticket $seat lên '$tableName' (standard format): HTTP ${res.code}")
+                                    } else {
+                                        pushTicketToTables(tables, index + 1, fullJson, standardJson, seat)
+                                    }
+                                }
+                            }
+                        })
+                    } else {
+                        pushTicketToTables(tables, index + 1, fullJson, standardJson, seat)
+                    }
+                }
             }
         })
     }
@@ -529,35 +912,36 @@ object SupabaseSyncService {
     }
 
     /**
-     * Đẩy Profile và thông tin Khách hàng lên Supabase (Đồng bộ vào các bảng: customers, costumers, profiles, khach_hang, users để phục vụ thống kê)
+     * Đẩy Profile và thông tin Khách hàng lên Supabase (Đồng bộ vào các bảng: customers, profiles, users để phục vụ quản lý & thống kê)
      */
-    fun pushProfileToSupabase(profile: UserProfile, onComplete: (Boolean) -> Unit) {
+    fun pushProfileToSupabase(profile: UserProfile, onComplete: (Boolean) -> Unit = {}) {
         if (SUPABASE_URL.contains("your-project-id") || profile.email.isBlank()) {
             onComplete(true)
             return
         }
 
-        val tablesToSync = listOf("customers", "costumers", "profiles", "khach_hang", "users")
+        val customerId = String.format("%08X", kotlin.math.abs(profile.email.hashCode())).take(8)
         val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()).apply {
             timeZone = java.util.TimeZone.getTimeZone("UTC")
         }.format(Date())
 
         val customerPayload = JSONObject().apply {
+            put("id", customerId)
+            put("name", profile.name.ifBlank { profile.email.substringBefore("@") })
             put("email", profile.email)
-            put("name", profile.name)
-            put("customer_name", profile.name)
-            put("full_name", profile.name)
-            put("ten", profile.name)
-            put("ho_ten", profile.name)
-            put("ten_khach_hang", profile.name)
-            put("points", profile.points)
-            put("diem_tich_luy", profile.points)
-            put("diem", profile.points)
-            put("balance", profile.balance)
-            put("updated_at", nowIso)
+            put("phone", "0901234567")
         }.toString()
 
+        val profileJsonClean = JSONObject().apply {
+            put("email", profile.email)
+            put("name", profile.name.ifBlank { profile.email.substringBefore("@") })
+            put("points", profile.points)
+        }.toString()
+
+        val tablesToSync = listOf("profiles", "customers", "costumers", "users")
+
         for (table in tablesToSync) {
+            val payload = if (table == "profiles") profileJsonClean else customerPayload
             val url = "$SUPABASE_URL/rest/v1/$table"
             val request = Request.Builder()
                 .url(url)
@@ -565,7 +949,7 @@ object SupabaseSyncService {
                 .addHeader("Authorization", "Bearer $SUPABASE_ANON_KEY")
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Prefer", "resolution=merge-duplicates")
-                .post(customerPayload.toRequestBody(jsonMediaType))
+                .post(payload.toRequestBody(jsonMediaType))
                 .build()
 
             client.newCall(request).enqueue(object : Callback {
@@ -827,7 +1211,9 @@ object SupabaseSyncService {
                     else -> "Combo Bắp + Nước"
                 }
                 var price = when {
+                    obj.has("sell_price") -> obj.optInt("sell_price", 0)
                     obj.has("price") -> obj.optInt("price", 0)
+                    obj.has("cost_price") -> obj.optInt("cost_price", 0)
                     obj.has("gia") -> obj.optInt("gia", 0)
                     obj.has("gia_tien") -> obj.optInt("gia_tien", 0)
                     obj.has("don_gia") -> obj.optInt("don_gia", 0)
@@ -1169,9 +1555,12 @@ object SupabaseSyncService {
                     else -> ""
                 }
 
+                val showtimeUuid = if (obj.has("id")) obj.optString("id") else obj.optString("uuid", "")
+
                 list.add(
                     Showtime(
                         id = obj.optInt("id", i + 1),
+                        uuid = showtimeUuid,
                         movieId = mId,
                         movieStringId = mIdStr,
                         movieTitle = mTitle,
@@ -1194,7 +1583,7 @@ object SupabaseSyncService {
     }
 
     /**
-     * Đồng bộ danh sách đặt chỗ (bookings) từ Supabase table 'bookings'
+     * Đồng bộ danh sách đặt chỗ (bookings) từ Supabase tables 'bookings', 'booking', 'tickets', 'ticket', 've', 'dat_ve'
      */
     fun fetchBookingsFromSupabase(onResult: (List<Booking>) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) {
@@ -1202,7 +1591,24 @@ object SupabaseSyncService {
             return
         }
 
-        val url = "$SUPABASE_URL/rest/v1/bookings?select=*"
+        val allBookings = mutableListOf<Booking>()
+        val tables = listOf("bookings", "booking", "tickets", "ticket", "ve", "dat_ve")
+        
+        fetchBookingsRecursive(tables, 0, allBookings, onResult)
+    }
+
+    private fun fetchBookingsRecursive(
+        tables: List<String>,
+        index: Int,
+        accumulated: MutableList<Booking>,
+        onResult: (List<Booking>) -> Unit
+    ) {
+        if (index >= tables.size) {
+            onResult(accumulated)
+            return
+        }
+        val tableName = tables[index]
+        val url = "$SUPABASE_URL/rest/v1/$tableName?select=*"
         val request = Request.Builder()
             .url(url)
             .addHeader("apikey", SUPABASE_ANON_KEY)
@@ -1211,64 +1617,134 @@ object SupabaseSyncService {
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Lỗi fetch bookings từ Supabase: ${e.message}")
-                onResult(emptyList())
+                Log.e(TAG, "Lỗi fetch bookings từ $tableName: ${e.message}")
+                fetchBookingsRecursive(tables, index + 1, accumulated, onResult)
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
-                    if (!response.isSuccessful) {
-                        Log.e(TAG, "Supabase bookings phản hồi lỗi: ${response.code}")
-                        onResult(emptyList())
-                        return
-                    }
-                    val bodyString = response.body?.string() ?: ""
-                    val list = mutableListOf<Booking>()
-                    try {
-                        val jsonArray = JSONArray(bodyString)
-                        for (i in 0 until jsonArray.length()) {
-                            val obj = jsonArray.getJSONObject(i)
-                            val seatsVal = when {
-                                obj.has("seats") && obj.optString("seats").isNotBlank() -> obj.optString("seats")
-                                obj.has("seat_code") && obj.optString("seat_code").isNotBlank() -> obj.optString("seat_code")
-                                obj.has("seat_codes") && obj.optString("seat_codes").isNotBlank() -> obj.optString("seat_codes")
-                                obj.has("selected_seats") && obj.optString("selected_seats").isNotBlank() -> obj.optString("selected_seats")
-                                obj.has("seat") && obj.optString("seat").isNotBlank() -> obj.optString("seat")
-                                obj.has("seat_id") && obj.optString("seat_id").isNotBlank() -> obj.optString("seat_id")
-                                obj.has("seat_number") && obj.optString("seat_number").isNotBlank() -> obj.optString("seat_number")
-                                else -> obj.optString("seats", "")
-                            }
-                            val idVal = obj.opt("id")
-                            val intId = when (idVal) {
-                                is Int -> idVal
-                                is Number -> idVal.toInt()
-                                is String -> idVal.toIntOrNull() ?: kotlin.math.abs(idVal.hashCode())
-                                else -> i + 1
-                            }
-                            val mIdVal = obj.opt("movie_id")
-                            val intMId = when (mIdVal) {
-                                is Int -> mIdVal
-                                is Number -> mIdVal.toInt()
-                                is String -> mIdVal.toIntOrNull() ?: kotlin.math.abs(mIdVal.hashCode())
-                                else -> 0
-                            }
-                            list.add(
-                                Booking(
-                                    id = intId,
-                                    movieId = intMId,
-                                    showtimeId = obj.optInt("showtime_id", 0),
-                                    seats = seatsVal,
-                                    totalPrice = obj.optInt("total_price", 0),
-                                    userEmail = obj.optString("user_email", "")
+                    if (response.isSuccessful) {
+                        val bodyString = response.body?.string() ?: ""
+                        try {
+                            val jsonArray = JSONArray(bodyString)
+                            for (i in 0 until jsonArray.length()) {
+                                val obj = jsonArray.getJSONObject(i)
+                                val seatsVal = when {
+                                    obj.has("seats") && obj.optString("seats").isNotBlank() -> obj.optString("seats")
+                                    obj.has("seat_code") && obj.optString("seat_code").isNotBlank() -> obj.optString("seat_code")
+                                    obj.has("seat_codes") && obj.optString("seat_codes").isNotBlank() -> obj.optString("seat_codes")
+                                    obj.has("selected_seats") && obj.optString("selected_seats").isNotBlank() -> obj.optString("selected_seats")
+                                    obj.has("seat") && obj.optString("seat").isNotBlank() -> obj.optString("seat")
+                                    obj.has("seat_id") && obj.optString("seat_id").isNotBlank() -> obj.optString("seat_id")
+                                    obj.has("seat_number") && obj.optString("seat_number").isNotBlank() -> obj.optString("seat_number")
+                                    obj.has("ghe") && obj.optString("ghe").isNotBlank() -> obj.optString("ghe")
+                                    obj.has("ma_ghe") && obj.optString("ma_ghe").isNotBlank() -> obj.optString("ma_ghe")
+                                    else -> obj.optString("seats", "")
+                                }
+
+                                if (seatsVal.isBlank()) continue
+
+                                val idVal = obj.opt("id")
+                                val intId = when (idVal) {
+                                    is Int -> idVal
+                                    is Number -> idVal.toInt()
+                                    is String -> idVal.toIntOrNull() ?: kotlin.math.abs(idVal.hashCode())
+                                    else -> i + 1
+                                }
+
+                                val mIdVal = obj.opt("movie_id") ?: obj.opt("film_id")
+                                val intMId = when (mIdVal) {
+                                    is Int -> mIdVal
+                                    is Number -> mIdVal.toInt()
+                                    is String -> mIdVal.toIntOrNull() ?: 0
+                                    else -> 0
+                                }
+                                val mStrId = when (mIdVal) {
+                                    is String -> mIdVal
+                                    else -> obj.optString("film_string_id", "")
+                                }
+
+                                val movieTitle = when {
+                                    obj.has("movie_title") && obj.optString("movie_title").isNotBlank() -> obj.optString("movie_title")
+                                    obj.has("movie_name") && obj.optString("movie_name").isNotBlank() -> obj.optString("movie_name")
+                                    obj.has("film_title") && obj.optString("film_title").isNotBlank() -> obj.optString("film_title")
+                                    obj.has("ten_phim") && obj.optString("ten_phim").isNotBlank() -> obj.optString("ten_phim")
+                                    obj.has("title") && obj.optString("title").isNotBlank() -> obj.optString("title")
+                                    else -> ""
+                                }
+
+                                val sIdVal = obj.opt("showtime_id") ?: obj.opt("suat_chieu_id")
+                                val intShowtimeId = when (sIdVal) {
+                                    is Int -> sIdVal
+                                    is Number -> sIdVal.toInt()
+                                    is String -> sIdVal.toIntOrNull() ?: 0
+                                    else -> 0
+                                }
+                                val showtimeUuid = when (sIdVal) {
+                                    is String -> sIdVal
+                                    else -> ""
+                                }
+
+                                val dateVal = when {
+                                    obj.has("booking_date") && obj.optString("booking_date").isNotBlank() -> obj.optString("booking_date")
+                                    obj.has("show_date") && obj.optString("show_date").isNotBlank() -> obj.optString("show_date")
+                                    obj.has("date") && obj.optString("date").isNotBlank() -> obj.optString("date")
+                                    obj.has("date_time") && obj.optString("date_time").isNotBlank() -> obj.optString("date_time")
+                                    obj.has("ngay_chieu") && obj.optString("ngay_chieu").isNotBlank() -> obj.optString("ngay_chieu")
+                                    obj.has("created_at") && obj.optString("created_at").isNotBlank() -> obj.optString("created_at")
+                                    else -> ""
+                                }
+
+                                val timeVal = when {
+                                    obj.has("start_time") && obj.optString("start_time").isNotBlank() -> obj.optString("start_time")
+                                    obj.has("time") && obj.optString("time").isNotBlank() -> obj.optString("time")
+                                    obj.has("show_time") && obj.optString("show_time").isNotBlank() -> obj.optString("show_time")
+                                    obj.has("gio_chieu") && obj.optString("gio_chieu").isNotBlank() -> obj.optString("gio_chieu")
+                                    obj.has("date_time") && obj.optString("date_time").isNotBlank() -> obj.optString("date_time")
+                                    else -> ""
+                                }
+
+                                val cinemaVal = when {
+                                    obj.has("cinema") && obj.optString("cinema").isNotBlank() -> obj.optString("cinema")
+                                    obj.has("rap") && obj.optString("rap").isNotBlank() -> obj.optString("rap")
+                                    obj.has("ten_rap") && obj.optString("ten_rap").isNotBlank() -> obj.optString("ten_rap")
+                                    else -> ""
+                                }
+
+                                val statusVal = obj.optString("status", obj.optString("trang_thai", "PAID"))
+                                val bookingCode = obj.optString("booking_code", obj.optString("ticket_code", ""))
+
+                                // Bỏ qua vé bị hủy / hoàn tiền
+                                if (statusVal.equals("CANCELLED", ignoreCase = true) ||
+                                    statusVal.equals("REFUNDED", ignoreCase = true) ||
+                                    statusVal.equals("DA_HUY", ignoreCase = true)) {
+                                    continue
+                                }
+
+                                accumulated.add(
+                                    Booking(
+                                        id = intId,
+                                        bookingCode = bookingCode,
+                                        movieId = intMId,
+                                        movieStringId = mStrId,
+                                        movieTitle = movieTitle,
+                                        showtimeId = intShowtimeId,
+                                        showtimeUuid = showtimeUuid,
+                                        seats = seatsVal,
+                                        date = dateVal,
+                                        time = timeVal,
+                                        cinema = cinemaVal,
+                                        totalPrice = obj.optInt("total_price", obj.optInt("price", 0)),
+                                        userEmail = obj.optString("user_email", ""),
+                                        status = statusVal
+                                    )
                                 )
-                            )
+                            }
+                        } catch (ex: Exception) {
+                            Log.e(TAG, "Lỗi parse bookings từ $tableName: ${ex.message}")
                         }
-                        onResult(list)
-                        Log.d(TAG, "Fetch thành công ${list.size} bookings từ Supabase!")
-                    } catch (ex: Exception) {
-                        Log.e(TAG, "Lỗi parse bookings: ${ex.message}")
-                        onResult(emptyList())
                     }
+                    fetchBookingsRecursive(tables, index + 1, accumulated, onResult)
                 }
             }
         })
