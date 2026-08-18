@@ -3027,24 +3027,21 @@ fun BookingFlowScreen(
                                                 letterSpacing = 1.sp
                                             )
                                             Text(
-                                                text = "Giả Lập Quét QR",
+                                                text = "⚡ Thanh toán nhanh (Demo)",
                                                 color = Color(0xFF1A73E8),
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier
                                                     .clip(RoundedCornerShape(4.dp))
-                                                    .background(Color(0xFF1A73E8).copy(alpha = 0.1f))
+                                                    .background(Color(0xFF1A73E8).copy(alpha = 0.12f))
                                                     .clickable {
                                                         isProcessingPayment = true
-                                                        val timer = Timer()
-                                                        timer.schedule(object : TimerTask() {
-                                                            override fun run() {
-                                                                isProcessingPayment = false
-                                                                showSuccessAnimation = true
-                                                            }
-                                                        }, 1200)
+                                                        viewModel.purchaseTicket {
+                                                            isProcessingPayment = false
+                                                            showSuccessAnimation = true
+                                                        }
                                                     }
-                                                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
                                             )
                                         }
                                         Spacer(modifier = Modifier.height(10.dp))
@@ -3313,10 +3310,8 @@ fun TicketsScreen(viewModel: MovieViewModel) {
     val tickets by viewModel.tickets.collectAsStateWithLifecycle()
     val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
 
-    // Hiển thị đầy đủ tất cả vé đã đặt trên thiết bị, không ẩn hay lọc mất vé cũ
-    val myTickets = remember(tickets, userEmail, isLoggedIn) {
-        if (tickets.isNotEmpty()) tickets else emptyList()
-    }
+    // Hiển thị đầy đủ tất cả vé đã đặt trên thiết bị, không ẩn hay lọc mất vé
+    val myTickets = tickets
 
     var selectedTicketForEnlarge by remember { mutableStateOf<Ticket?>(null) }
     var ticketToDelete by remember { mutableStateOf<Ticket?>(null) }
@@ -3459,7 +3454,7 @@ fun TicketsScreen(viewModel: MovieViewModel) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(myTickets, key = { it.id.toString() + "_" + it.barcode }) { ticket ->
+                items(myTickets, key = { if (it.barcode.isNotBlank()) it.barcode else if (it.bookingCode.isNotBlank()) it.bookingCode else "${it.id}_${it.timestamp}_${it.seats}" }) { ticket ->
                     TicketHistoryItem(
                         ticket = ticket,
                         viewModel = viewModel,

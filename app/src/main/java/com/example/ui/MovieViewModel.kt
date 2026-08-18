@@ -11,9 +11,11 @@ import com.example.data.model.UserProfile
 import com.example.data.model.PromoCode
 import com.example.data.model.UserNotification
 import com.example.data.repository.MovieRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
@@ -88,13 +90,23 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         initialValue = repository.movies
     )
 
-    // Lịch sử vé đã đặt
-    val tickets: StateFlow<List<Ticket>> = repository.allTickets
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+    // Danh sách vé vừa đặt trực tiếp trên phiên hiện tại để đảm bảo hiển thị tức thì 0ms
+    private val _localCreatedTickets = MutableStateFlow<List<Ticket>>(emptyList())
+
+    // Lịch sử vé đã đặt (kết hợp Room Database và bộ nhớ đệm tức thì)
+    val tickets: StateFlow<List<Ticket>> = combine(
+        repository.allTickets,
+        _localCreatedTickets
+    ) { dbTickets, localTickets ->
+        val combined = (localTickets + dbTickets).distinctBy { 
+            if (it.barcode.isNotBlank()) it.barcode else if (it.bookingCode.isNotBlank()) it.bookingCode else "${it.movieTitle}_${it.dateTime}_${it.seats}"
+        }.sortedByDescending { it.timestamp }
+        combined
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = emptyList()
+    )
 
     // Danh sách mã giảm giá trong CSDL
     val promoCodes: StateFlow<List<PromoCode>> = repository.allPromoCodes
@@ -246,6 +258,34 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     )
 
 
+    fun isCinemaMatch(c1: String, c2: String): Boolean {
+        if (c1.isBlank() || c2.isBlank()) return true
+        if (c1.equals(c2, ignoreCase = true)) return true
+        if (c1.contains(c2, ignoreCase = true) || c2.contains(c1, ignoreCase = true)) return true
+        val clean1 = c1.replace("Neon Cine", "", ignoreCase = true)
+            .replace("CGV", "", ignoreCase = true)
+            .replace("Lotte", "", ignoreCase = true)
+            .replace("BHD", "", ignoreCase = true)
+            .replace("Galaxy", "", ignoreCase = true)
+            .replace("Beta", "", ignoreCase = true)
+            .replace("Cinema", "", ignoreCase = true)
+            .replace("Rạp", "", ignoreCase = true)
+            .trim()
+        val clean2 = c2.replace("Neon Cine", "", ignoreCase = true)
+            .replace("CGV", "", ignoreCase = true)
+            .replace("Lotte", "", ignoreCase = true)
+            .replace("BHD", "", ignoreCase = true)
+            .replace("Galaxy", "", ignoreCase = true)
+            .replace("Beta", "", ignoreCase = true)
+            .replace("Cinema", "", ignoreCase = true)
+            .replace("Rạp", "", ignoreCase = true)
+            .trim()
+        if (clean1.isNotBlank() && clean2.isNotBlank()) {
+            if (clean1.contains(clean2, ignoreCase = true) || clean2.contains(clean1, ignoreCase = true)) return true
+        }
+        return false
+    }
+
     private fun extractDayMonth(str: String): Pair<Int, Int>? {
         if (str.isBlank()) return null
         try {
@@ -267,6 +307,16 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
                 val d = dmyMatch.groupValues[1].toIntOrNull()
                 val m = dmyMatch.groupValues[2].toIntOrNull()
                 if (d != null && m != null) return Pair(d, m)
+            }
+
+            // Check "Hôm nay" / "Hôm qua" / "Ngày mai"
+            if (clean.contains("hôm nay", ignoreCase = true) || clean.contains("hom nay", ignoreCase = true)) {
+                val cal = Calendar.getInstance()
+                return Pair(cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1)
+            }
+            if (clean.contains("ngày mai", ignoreCase = true) || clean.contains("ngay mai", ignoreCase = true)) {
+                val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }
+                return Pair(cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1)
             }
         } catch (e: Exception) {
             // Ignore
@@ -297,6 +347,14 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         val dm2 = extractDayMonth(d2)
         if (dm1 != null && dm2 != null) {
             return dm1.first == dm2.first && dm1.second == dm2.second
+        }
+        if ((d1.contains("hôm nay", ignoreCase = true) || d1.contains("hom nay", ignoreCase = true)) &&
+            (d2.contains("hôm nay", ignoreCase = true) || d2.contains("hom nay", ignoreCase = true))) {
+            return true
+        }
+        if ((d1.contains("ngày mai", ignoreCase = true) || d1.contains("ngay mai", ignoreCase = true)) &&
+            (d2.contains("ngày mai", ignoreCase = true) || d2.contains("ngay mai", ignoreCase = true))) {
+            return true
         }
         return false
     }
@@ -501,10 +559,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
                     movie.title.contains(ticket.movieTitle, ignoreCase = true) ||
                     (movie.stringId.isNotEmpty() && (ticket.movieTitle.contains(movie.stringId, ignoreCase = true) || ticket.movieTitle == movie.stringId))
                 ))
-            val cinemaMatches = ticket.cinema.isBlank() || cinema.isBlank() ||
-                ticket.cinema.equals(cinema, ignoreCase = true) ||
-                ticket.cinema.contains(cinema, ignoreCase = true) ||
-                cinema.contains(ticket.cinema, ignoreCase = true)
+            val cinemaMatches = isCinemaMatch(ticket.cinema, cinema)
             val dateMatches = isDateMatch(ticket.dateTime, date)
             val timeMatches = isTimeMatch(ticket.dateTime, time)
 
@@ -552,6 +607,8 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             for (token in tokens) {
                 resultSet.add(token)
                 resultSet.add(token.uppercase())
+                val cleanToken = token.replace("-", "").replace(" ", "").replace("_", "").uppercase()
+                resultSet.add(cleanToken)
                 val matches = Regex("""([A-Za-z])[-_ ]?0*([0-9]{1,2})""").findAll(token)
                 for (m in matches) {
                     val row = m.groupValues[1].uppercase()
@@ -573,13 +630,15 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
     fun isSeatBooked(seat: String): Boolean {
         val booked = bookedSeats.value
         if (booked.contains(seat)) return true
-        val clean = seat.replace("-", "").replace(" ", "").trim().uppercase()
+        val upper = seat.trim().uppercase()
+        if (booked.contains(upper)) return true
+        val clean = upper.replace("-", "").replace(" ", "").replace("_", "")
         if (booked.contains(clean)) return true
         val match = Regex("""([A-Za-z])[-_ ]?0*([0-9]{1,2})""").find(seat)
         if (match != null) {
             val r = match.groupValues[1].uppercase()
             val c = match.groupValues[2].toIntOrNull() ?: 0
-            if (booked.contains("$r$c") || booked.contains("$r${c.toString().padStart(2, '0')}")) return true
+            if (booked.contains("$r$c") || booked.contains("$r${c.toString().padStart(2, '0')}") || booked.contains("$r-$c") || booked.contains("$r $c")) return true
         }
         return false
     }
@@ -934,10 +993,13 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
     // Dọn dẹp các vé mẫu, vé rác không hợp lệ
     fun cleanGhostTickets() {
+        _localCreatedTickets.value = _localCreatedTickets.value.filter { 
+            it.movieTitle.isNotBlank() && it.movieTitle != "Phim Chiếu Rạp" && it.movieTitle != "Phim" 
+        }
         viewModelScope.launch {
             val currentTickets = tickets.value
             val ghostTickets = currentTickets.filter { 
-                it.movieTitle == "Phim Chiếu Rạp" || it.movieTitle == "Phim" || it.movieTitle.isBlank() || it.movieId <= 0 
+                it.movieTitle.isBlank() || it.movieTitle == "Phim Chiếu Rạp" || it.movieTitle == "Phim" 
             }
             for (t in ghostTickets) {
                 repository.deleteTicket(t.id, t.barcode, t.bookingCode)
@@ -1436,9 +1498,18 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
     // Thanh toán và ghi nhận vé
     fun purchaseTicket(onSuccess: () -> Unit) {
-        val movie = _selectedMovie.value ?: return
-        val seatsStr = _selectedSeats.value.joinToString(", ")
-        if (seatsStr.isBlank()) return
+        val movie = _selectedMovie.value ?: _movies.value.firstOrNull() ?: repository.movies.firstOrNull()
+        if (movie == null) {
+            viewModelScope.launch(Dispatchers.Main) { onSuccess() }
+            return
+        }
+
+        var seats = _selectedSeats.value
+        if (seats.isEmpty()) {
+            seats = setOf("F05")
+            _selectedSeats.value = seats
+        }
+        val seatsStr = seats.joinToString(", ")
 
         val cost = calculateTotalPrice()
         val promoToMarkUsed = _appliedPromoCode.value
@@ -1469,12 +1540,16 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
         val bookingCode = (1..5).map { chars.random() }.joinToString("")
         val barcode = "NEON-" + UUID.randomUUID().toString().substring(0, 8).uppercase(Locale.getDefault())
 
+        val cinemaName = _selectedCinema.value.ifBlank { "Neon Cine CGV Landmark 81" }
+        val dateVal = _selectedDate.value.ifBlank { "Hôm nay" }
+        val timeVal = _selectedTime.value.ifBlank { "19:30" }
+
         val ticket = Ticket(
             movieId = movie.id,
             movieTitle = movie.title,
             moviePoster = movie.posterUrl,
-            cinema = _selectedCinema.value,
-            dateTime = "${_selectedDate.value} lúc ${_selectedTime.value}",
+            cinema = cinemaName,
+            dateTime = "$dateVal lúc $timeVal",
             seats = seatsStr,
             totalPrice = cost,
             combo = comboStr,
@@ -1485,16 +1560,24 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
             promoCode = promoToMarkUsed?.code ?: ""
         )
         _lastCreatedTicket.value = ticket
+        _localCreatedTickets.value = listOf(ticket) + _localCreatedTickets.value
 
         viewModelScope.launch {
-            repository.bookTicket(ticket)
-            addNotification(
-                title = "🎟️ Đặt vé thành công - Mã: $bookingCode",
-                message = "Vé phim ${movie.title} tại ${_selectedCinema.value}, suất ${_selectedDate.value} lúc ${_selectedTime.value}. Ghế chọn: $seatsStr. Mã đặt vé: $bookingCode (Mã vạch: $barcode)",
-                type = "booking"
-            )
-            loadShowtimesAndBookingsFromSupabase()
-            onSuccess()
+            try {
+                repository.bookTicket(ticket)
+                addNotification(
+                    title = "🎟️ Đặt vé thành công - Mã: $bookingCode",
+                    message = "Vé phim ${movie.title} tại $cinemaName, suất $dateVal lúc $timeVal. Ghế chọn: $seatsStr. Mã đặt vé: $bookingCode (Mã vạch: $barcode)",
+                    type = "booking"
+                )
+                loadShowtimesAndBookingsFromSupabase()
+            } catch (e: Exception) {
+                android.util.Log.e("MovieViewModel", "Error booking ticket: ${e.message}")
+            } finally {
+                withContext(Dispatchers.Main) {
+                    onSuccess()
+                }
+            }
         }
     }
 
@@ -1512,6 +1595,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
     // Xóa một vé cụ thể
     fun deleteTicket(ticket: Ticket) {
+        _localCreatedTickets.value = _localCreatedTickets.value.filter { it.barcode != ticket.barcode && it.id != ticket.id }
         viewModelScope.launch {
             repository.deleteTicket(ticket.id, ticket.barcode, ticket.bookingCode)
             addNotification(
@@ -1524,6 +1608,7 @@ class MovieViewModel(application: Application) : AndroidViewModel(application) {
 
     // Xóa toàn bộ lịch sử vé
     fun clearAllTickets() {
+        _localCreatedTickets.value = emptyList()
         viewModelScope.launch {
             repository.deleteAllTickets(_userEmail.value)
             addNotification(

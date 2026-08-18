@@ -12,6 +12,7 @@ import com.example.network.Part
 import com.example.network.RetrofitClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -21,8 +22,14 @@ class MovieRepository(
     private val prefs: android.content.SharedPreferences? = null
 ) {
 
-    val allTickets: Flow<List<Ticket>> = cinemaDao.getAllTickets()
-    val allPromoCodes: Flow<List<PromoCode>> = cinemaDao.getAllPromoCodes()
+    val allTickets: Flow<List<Ticket>> = cinemaDao.getAllTickets().catch { e ->
+        android.util.Log.e("MovieRepository", "Error loading tickets from Room: ${e.message}")
+        emit(emptyList())
+    }
+    val allPromoCodes: Flow<List<PromoCode>> = cinemaDao.getAllPromoCodes().catch { e ->
+        android.util.Log.e("MovieRepository", "Error loading promo codes from Room: ${e.message}")
+        emit(emptyList())
+    }
 
     // Danh sách phim tĩnh chất lượng cao
     val movies = listOf(
@@ -250,7 +257,10 @@ class MovieRepository(
                 }
             }
         }
-        return cinemaDao.getReviewsForMovie(movieId)
+        return cinemaDao.getReviewsForMovie(movieId).catch { e ->
+            android.util.Log.e("MovieRepository", "Error loading reviews from Room: ${e.message}")
+            emit(emptyList())
+        }
     }
 
     suspend fun addReview(review: Review) = withContext(Dispatchers.IO) {
@@ -261,6 +271,12 @@ class MovieRepository(
     }
 
     suspend fun bookTicket(ticket: Ticket) = withContext(Dispatchers.IO) {
+        prefs?.let { p ->
+            val deleted = p.getStringSet("deleted_ticket_barcodes", emptySet())?.toMutableSet() ?: mutableSetOf()
+            if (ticket.barcode.isNotBlank()) deleted.remove(ticket.barcode)
+            if (ticket.bookingCode.isNotBlank()) deleted.remove(ticket.bookingCode)
+            p.edit().putStringSet("deleted_ticket_barcodes", deleted).apply()
+        }
         cinemaDao.insertTicket(ticket)
         com.example.data.supabase.SupabaseSyncService.pushTicketToSupabase(ticket) { success ->
             // Đã lưu vé lên Supabase backend thành công
@@ -303,13 +319,17 @@ class MovieRepository(
 
                 if (validTickets.isNotEmpty()) {
                     CoroutineScope(Dispatchers.IO).launch {
-                        for (ticket in validTickets) {
-                            if (ticket.barcode.isNotBlank()) {
-                                val existing = cinemaDao.getTicketByBarcode(ticket.barcode)
-                                if (existing == null) {
-                                    cinemaDao.insertTicket(ticket)
+                        try {
+                            for (ticket in validTickets) {
+                                if (ticket.barcode.isNotBlank()) {
+                                    val existing = cinemaDao.getTicketByBarcode(ticket.barcode)
+                                    if (existing == null) {
+                                        cinemaDao.insertTicket(ticket)
+                                    }
                                 }
                             }
+                        } catch (e: Throwable) {
+                            android.util.Log.e("MovieRepository", "Error saving synced tickets to Room: ${e.message}")
                         }
                     }
                 }
@@ -321,33 +341,41 @@ class MovieRepository(
         com.example.data.supabase.SupabaseSyncService.fetchPromoCodesFromSupabase { remotePromos ->
             if (remotePromos.isNotEmpty()) {
                 CoroutineScope(Dispatchers.IO).launch {
-                    cinemaDao.insertPromoCodes(remotePromos)
+                    try {
+                        cinemaDao.insertPromoCodes(remotePromos)
+                    } catch (e: Throwable) {
+                        android.util.Log.e("MovieRepository", "Error saving synced promos to Room: ${e.message}")
+                    }
                 }
             }
         }
     }
 
     suspend fun initDefaultDataIfNeeded() = withContext(Dispatchers.IO) {
-        for (movie in movies) {
-            val count = cinemaDao.getReviewCount(movie.id)
-            if (count == 0) {
-                val movieReviews = defaultReviews.filter { it.movieId == movie.id }
-                cinemaDao.insertReviews(movieReviews)
+        try {
+            for (movie in movies) {
+                val count = try { cinemaDao.getReviewCount(movie.id) } catch (e: Throwable) { 0 }
+                if (count == 0) {
+                    val movieReviews = defaultReviews.filter { it.movieId == movie.id }
+                    try { cinemaDao.insertReviews(movieReviews) } catch (e: Throwable) {}
+                }
             }
-        }
-        val promoCount = cinemaDao.getPromoCodeCount()
-        if (promoCount == 0) {
-            val defaultPromos = listOf(
-                PromoCode("NEON30", 30000, "Giảm ngay 30.000đ cho đơn hàng của bạn"),
-                PromoCode("HE2026", 50000, "Chào hè 2026 rực rỡ giảm giá cực sốc 50.000đ"),
-                PromoCode("BAPNUOC", 20000, "Mã giảm giá 20.000đ khi mua combo bắp nước"),
-                PromoCode("PREMIUM", 100000, "Mã giảm giá hạng VIP trị giá 100.000đ")
-            )
-            cinemaDao.insertPromoCodes(defaultPromos)
-            // Đẩy các mã giảm giá mặc định lên Supabase
-            for (promo in defaultPromos) {
-                com.example.data.supabase.SupabaseSyncService.pushPromoCodeToSupabase(promo) {}
+            val promoCount = try { cinemaDao.getPromoCodeCount() } catch (e: Throwable) { 0 }
+            if (promoCount == 0) {
+                val defaultPromos = listOf(
+                    PromoCode("NEON30", 30000, "Giảm ngay 30.000đ cho đơn hàng của bạn"),
+                    PromoCode("HE2026", 50000, "Chào hè 2026 rực rỡ giảm giá cực sốc 50.000đ"),
+                    PromoCode("BAPNUOC", 20000, "Mã giảm giá 20.000đ khi mua combo bắp nước"),
+                    PromoCode("PREMIUM", 100000, "Mã giảm giá hạng VIP trị giá 100.000đ")
+                )
+                try { cinemaDao.insertPromoCodes(defaultPromos) } catch (e: Throwable) {}
+                // Đẩy các mã giảm giá mặc định lên Supabase
+                for (promo in defaultPromos) {
+                    com.example.data.supabase.SupabaseSyncService.pushPromoCodeToSupabase(promo) {}
+                }
             }
+        } catch (e: Throwable) {
+            android.util.Log.e("MovieRepository", "initDefaultDataIfNeeded error: ${e.message}")
         }
     }
 
