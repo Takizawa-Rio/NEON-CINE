@@ -978,7 +978,7 @@ object SupabaseSyncService {
     }
 
     /**
-     * Đồng bộ danh sách lịch chiếu (showtimes) từ Supabase table 'showtimes'
+     * Đồng bộ danh sách lịch chiếu (showtimes) từ Supabase (thử lần lượt các bảng: showtimes, show_times, lich_chieu, suat_chieu, schedules, screening_schedules)
      */
     fun fetchShowtimesFromSupabase(onResult: (List<Showtime>) -> Unit) {
         if (SUPABASE_URL.contains("your-project-id")) {
@@ -986,7 +986,20 @@ object SupabaseSyncService {
             return
         }
 
-        val url = "$SUPABASE_URL/rest/v1/showtimes?select=*"
+        fetchShowtimesFromTables(
+            tables = listOf("showtimes", "show_times", "lich_chieu", "suat_chieu", "schedules", "screening_schedules", "showtime"),
+            index = 0,
+            onResult = onResult
+        )
+    }
+
+    private fun fetchShowtimesFromTables(tables: List<String>, index: Int, onResult: (List<Showtime>) -> Unit) {
+        if (index >= tables.size) {
+            onResult(emptyList())
+            return
+        }
+        val tableName = tables[index]
+        val url = "$SUPABASE_URL/rest/v1/$tableName?select=*"
         val request = Request.Builder()
             .url(url)
             .addHeader("apikey", SUPABASE_ANON_KEY)
@@ -995,124 +1008,133 @@ object SupabaseSyncService {
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Lỗi fetch showtimes từ Supabase: ${e.message}")
-                onResult(emptyList())
+                Log.e(TAG, "Lỗi fetch $tableName từ Supabase: ${e.message}")
+                fetchShowtimesFromTables(tables, index + 1, onResult)
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     if (!response.isSuccessful) {
-                        Log.e(TAG, "Supabase showtimes phản hồi lỗi: ${response.code}")
-                        onResult(emptyList())
+                        Log.e(TAG, "Supabase $tableName phản hồi lỗi: ${response.code}")
+                        fetchShowtimesFromTables(tables, index + 1, onResult)
                         return
                     }
                     val bodyString = response.body?.string() ?: ""
-                    val list = mutableListOf<Showtime>()
-                    try {
-                        val jsonArray = JSONArray(bodyString)
-                        for (i in 0 until jsonArray.length()) {
-                            val obj = jsonArray.getJSONObject(i)
-                            val mIdStr = if (obj.has("movie_id")) obj.optString("movie_id") else obj.optString("movieId", "")
-                            val mIdObj = if (obj.has("movie_id")) obj.get("movie_id") else obj.opt("movieId")
-                            val mId = when (mIdObj) {
-                                is Int -> mIdObj
-                                is Number -> mIdObj.toInt()
-                                is String -> mIdObj.toIntOrNull() ?: kotlin.math.abs(mIdObj.hashCode())
-                                else -> 0
-                            }
-                            var sTime = when {
-                                obj.has("start_time") && obj.optString("start_time").isNotBlank() -> obj.optString("start_time")
-                                obj.has("startTime") && obj.optString("startTime").isNotBlank() -> obj.optString("startTime")
-                                obj.has("time") && obj.optString("time").isNotBlank() -> obj.optString("time")
-                                obj.has("gio_chieu") && obj.optString("gio_chieu").isNotBlank() -> obj.optString("gio_chieu")
-                                obj.has("khung_gio") && obj.optString("khung_gio").isNotBlank() -> obj.optString("khung_gio")
-                                obj.has("suat_chieu") && obj.optString("suat_chieu").isNotBlank() -> obj.optString("suat_chieu")
-                                obj.has("gio_bat_dau") && obj.optString("gio_bat_dau").isNotBlank() -> obj.optString("gio_bat_dau")
-                                obj.has("time_slot") && obj.optString("time_slot").isNotBlank() -> obj.optString("time_slot")
-                                else -> ""
-                            }
-                            if (sTime.contains("T")) {
-                                val tPart = sTime.substringAfter("T").substringBefore("+").substringBefore("Z").trim()
-                                if (tPart.length >= 5) sTime = tPart.substring(0, 5)
-                            } else if (sTime.length >= 5 && sTime.contains(":")) {
-                                sTime = sTime.substring(0, 5) // Lấy HH:mm bỏ phần :ss nếu có
-                            }
-
-                            var eTime = when {
-                                obj.has("end_time") && obj.optString("end_time").isNotBlank() -> obj.optString("end_time")
-                                obj.has("endTime") && obj.optString("endTime").isNotBlank() -> obj.optString("endTime")
-                                obj.has("gio_ket_thuc") && obj.optString("gio_ket_thuc").isNotBlank() -> obj.optString("gio_ket_thuc")
-                                else -> ""
-                            }
-                            if (eTime.contains("T")) {
-                                val tPart = eTime.substringAfter("T").substringBefore("+").substringBefore("Z").trim()
-                                if (tPart.length >= 5) eTime = tPart.substring(0, 5)
-                            } else if (eTime.length >= 5 && eTime.contains(":")) {
-                                eTime = eTime.substring(0, 5)
-                            }
-
-                            var sDate = when {
-                                obj.has("show_date") && obj.optString("show_date").isNotBlank() -> obj.optString("show_date")
-                                obj.has("showDate") && obj.optString("showDate").isNotBlank() -> obj.optString("showDate")
-                                obj.has("date") && obj.optString("date").isNotBlank() -> obj.optString("date")
-                                obj.has("ngay_chieu") && obj.optString("ngay_chieu").isNotBlank() -> obj.optString("ngay_chieu")
-                                obj.has("ngay") && obj.optString("ngay").isNotBlank() -> obj.optString("ngay")
-                                obj.has("screening_date") && obj.optString("screening_date").isNotBlank() -> obj.optString("screening_date")
-                                else -> ""
-                            }
-                            // Nếu show_date là YYYY-MM-DD hoặc ISO timestamp chuyển thành dd/MM để khớp với UI
-                            if (sDate.contains("-")) {
-                                val dateOnly = sDate.substringBefore("T").substringBefore(" ").trim()
-                                val parts = dateOnly.split("-")
-                                if (parts.size >= 3) {
-                                    val day = parts[2].padStart(2, '0')
-                                    val month = parts[1].padStart(2, '0')
-                                    sDate = "$day/$month"
-                                }
-                            }
-                            val rId = when {
-                                obj.has("room_id") -> obj.optString("room_id")
-                                obj.has("roomId") -> obj.optString("roomId")
-                                else -> ""
-                            }
-                            val regPrice = if (obj.has("regular_price") && !obj.isNull("regular_price")) obj.optDouble("regular_price") else null
-                            val vPrice = if (obj.has("vip_price") && !obj.isNull("vip_price")) obj.optDouble("vip_price") else null
-                            val vPercent = if (obj.has("vip_percent") && !obj.isNull("vip_percent")) obj.optDouble("vip_percent") else null
-                            val pr = if (obj.has("price") && !obj.isNull("price")) obj.optInt("price") else (regPrice?.toInt() ?: 0)
-
-                            val mTitle = when {
-                                obj.has("movie_title") -> obj.optString("movie_title")
-                                obj.has("movieTitle") -> obj.optString("movieTitle")
-                                obj.has("title") -> obj.optString("title")
-                                else -> ""
-                            }
-
-                            list.add(
-                                Showtime(
-                                    id = obj.optInt("id", i + 1),
-                                    movieId = mId,
-                                    movieStringId = mIdStr,
-                                    movieTitle = mTitle,
-                                    startTime = sTime,
-                                    endTime = eTime,
-                                    price = pr,
-                                    regularPrice = regPrice,
-                                    vipPrice = vPrice,
-                                    vipPercent = vPercent,
-                                    date = sDate,
-                                    roomId = rId
-                                )
-                            )
-                        }
+                    val list = parseShowtimesJson(bodyString)
+                    if (list.isNotEmpty()) {
+                        Log.d(TAG, "Fetch thành công ${list.size} showtimes từ bảng '$tableName' Supabase!")
                         onResult(list)
-                        Log.d(TAG, "Fetch thành công ${list.size} showtimes từ Supabase!")
-                    } catch (ex: Exception) {
-                        Log.e(TAG, "Lỗi parse showtimes: ${ex.message}")
-                        onResult(emptyList())
+                    } else {
+                        fetchShowtimesFromTables(tables, index + 1, onResult)
                     }
                 }
             }
         })
+    }
+
+    private fun parseShowtimesJson(bodyString: String): List<Showtime> {
+        val list = mutableListOf<Showtime>()
+        try {
+            val jsonArray = JSONArray(bodyString)
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val mIdStr = if (obj.has("movie_id")) obj.optString("movie_id") else obj.optString("movieId", "")
+                val mIdObj = if (obj.has("movie_id")) obj.get("movie_id") else obj.opt("movieId")
+                val mId = when (mIdObj) {
+                    is Int -> mIdObj
+                    is Number -> mIdObj.toInt()
+                    is String -> mIdObj.toIntOrNull() ?: kotlin.math.abs(mIdObj.hashCode())
+                    else -> 0
+                }
+                var sTime = when {
+                    obj.has("start_time") && obj.optString("start_time").isNotBlank() -> obj.optString("start_time")
+                    obj.has("startTime") && obj.optString("startTime").isNotBlank() -> obj.optString("startTime")
+                    obj.has("time") && obj.optString("time").isNotBlank() -> obj.optString("time")
+                    obj.has("gio_chieu") && obj.optString("gio_chieu").isNotBlank() -> obj.optString("gio_chieu")
+                    obj.has("khung_gio") && obj.optString("khung_gio").isNotBlank() -> obj.optString("khung_gio")
+                    obj.has("suat_chieu") && obj.optString("suat_chieu").isNotBlank() -> obj.optString("suat_chieu")
+                    obj.has("gio_bat_dau") && obj.optString("gio_bat_dau").isNotBlank() -> obj.optString("gio_bat_dau")
+                    obj.has("time_slot") && obj.optString("time_slot").isNotBlank() -> obj.optString("time_slot")
+                    else -> ""
+                }
+                if (sTime.contains("T")) {
+                    val tPart = sTime.substringAfter("T").substringBefore("+").substringBefore("Z").trim()
+                    if (tPart.length >= 5) sTime = tPart.substring(0, 5)
+                } else if (sTime.length >= 5 && sTime.contains(":")) {
+                    sTime = sTime.substring(0, 5) // Lấy HH:mm bỏ phần :ss nếu có
+                }
+
+                var eTime = when {
+                    obj.has("end_time") && obj.optString("end_time").isNotBlank() -> obj.optString("end_time")
+                    obj.has("endTime") && obj.optString("endTime").isNotBlank() -> obj.optString("endTime")
+                    obj.has("gio_ket_thuc") && obj.optString("gio_ket_thuc").isNotBlank() -> obj.optString("gio_ket_thuc")
+                    else -> ""
+                }
+                if (eTime.contains("T")) {
+                    val tPart = eTime.substringAfter("T").substringBefore("+").substringBefore("Z").trim()
+                    if (tPart.length >= 5) eTime = tPart.substring(0, 5)
+                } else if (eTime.length >= 5 && eTime.contains(":")) {
+                    eTime = eTime.substring(0, 5)
+                }
+
+                var sDate = when {
+                    obj.has("show_date") && obj.optString("show_date").isNotBlank() -> obj.optString("show_date")
+                    obj.has("showDate") && obj.optString("showDate").isNotBlank() -> obj.optString("showDate")
+                    obj.has("date") && obj.optString("date").isNotBlank() -> obj.optString("date")
+                    obj.has("ngay_chieu") && obj.optString("ngay_chieu").isNotBlank() -> obj.optString("ngay_chieu")
+                    obj.has("ngay") && obj.optString("ngay").isNotBlank() -> obj.optString("ngay")
+                    obj.has("screening_date") && obj.optString("screening_date").isNotBlank() -> obj.optString("screening_date")
+                    else -> ""
+                }
+                // Nếu show_date là YYYY-MM-DD hoặc ISO timestamp chuyển thành dd/MM để khớp với UI
+                if (sDate.contains("-")) {
+                    val dateOnly = sDate.substringBefore("T").substringBefore(" ").trim()
+                    val parts = dateOnly.split("-")
+                    if (parts.size >= 3) {
+                        val day = parts[2].padStart(2, '0')
+                        val month = parts[1].padStart(2, '0')
+                        sDate = "$day/$month"
+                    }
+                }
+                val rId = when {
+                    obj.has("room_id") -> obj.optString("room_id")
+                    obj.has("roomId") -> obj.optString("roomId")
+                    else -> ""
+                }
+                val regPrice = if (obj.has("regular_price") && !obj.isNull("regular_price")) obj.optDouble("regular_price") else null
+                val vPrice = if (obj.has("vip_price") && !obj.isNull("vip_price")) obj.optDouble("vip_price") else null
+                val vPercent = if (obj.has("vip_percent") && !obj.isNull("vip_percent")) obj.optDouble("vip_percent") else null
+                val pr = if (obj.has("price") && !obj.isNull("price")) obj.optInt("price") else (regPrice?.toInt() ?: 0)
+
+                val mTitle = when {
+                    obj.has("movie_title") -> obj.optString("movie_title")
+                    obj.has("movieTitle") -> obj.optString("movieTitle")
+                    obj.has("title") -> obj.optString("title")
+                    else -> ""
+                }
+
+                list.add(
+                    Showtime(
+                        id = obj.optInt("id", i + 1),
+                        movieId = mId,
+                        movieStringId = mIdStr,
+                        movieTitle = mTitle,
+                        startTime = sTime,
+                        endTime = eTime,
+                        price = pr,
+                        regularPrice = regPrice,
+                        vipPrice = vPrice,
+                        vipPercent = vPercent,
+                        date = sDate,
+                        roomId = rId
+                    )
+                )
+            }
+            Log.d(TAG, "Đã tải thành công ${list.size} showtimes từ Supabase!")
+        } catch (ex: Exception) {
+            Log.e(TAG, "Lỗi parse showtimes: ${ex.message}")
+        }
+        return list
     }
 
     /**
